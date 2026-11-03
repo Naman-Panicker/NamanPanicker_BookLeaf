@@ -6,9 +6,15 @@ services:
     region: ohio
     plan: free
     # NODE_ENV=production would make pnpm skip devDependencies, and the build needs tsup.
-    buildCommand: corepack enable && NODE_ENV=development pnpm install --frozen-lockfile && pnpm --filter @bookleaf/api build
+    buildCommand: corepack enable && NODE_ENV=development pnpm install --frozen-lockfile && pnpm --filter @bookleaf/api build && pnpm --filter @bookleaf/api db:migrate
     startCommand: pnpm --filter @bookleaf/api start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false

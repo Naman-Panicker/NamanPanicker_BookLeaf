@@ -1,7 +1,18 @@
 import { createApp } from './app';
+import { systemClock } from './clock';
+import { loadConfig } from './config';
+import { createPrisma } from './db';
+import { noopPublisher } from './events';
 
-const port = Number(process.env.PORT ?? 4000);
-const app = createApp({ cookieSecure: process.env.NODE_ENV === 'production' });
+const { databaseUrl, sessionSecret, port, cookieSecure } = loadConfig(process.env);
+
+const app = createApp({
+  cookieSecure,
+  sessionSecret,
+  prisma: createPrisma(databaseUrl),
+  clock: systemClock,
+  publisher: noopPublisher,
+});
 
 app.listen(port, () => {
   console.log(`API listening on port ${port}`);

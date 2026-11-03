@@ -1,8 +1,8 @@
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { createApp } from './app';
+import { makeTestApp } from './testing/harness';
 
-const makeApp = () => createApp({ cookieSecure: true });
+const makeApp = () => makeTestApp({ cookieSecure: true });
 
 describe('health', () => {
   it('reports ok', async () => {
@@ -33,7 +33,7 @@ describe('spike cookie', () => {
   });
 
   it('leaves Secure off when cookieSecure is false, for plain-http local dev', async () => {
-    const res = await request(createApp({ cookieSecure: false })).post('/api/spike/cookie');
+    const res = await request(makeTestApp({ cookieSecure: false })).post('/api/spike/cookie');
 
     const [cookie] = res.get('Set-Cookie') ?? [];
     expect(cookie).not.toMatch(/Secure/);
@@ -48,7 +48,7 @@ describe('spike cookie', () => {
 
   it('reports the cookie once it has been set', async () => {
     // supertest talks plain http, and its cookie jar won't send a Secure cookie back over it.
-    const agent = request.agent(createApp({ cookieSecure: false }));
+    const agent = request.agent(makeTestApp({ cookieSecure: false }));
     await agent.post('/api/spike/cookie');
 
     const res = await agent.get('/api/spike/cookie');

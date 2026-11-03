@@ -7,6 +7,9 @@ coverage/
 .vercel/
 .DS_Store
 
+# Prisma client, rebuilt by postinstall.
+apps/api/src/generated/
+
 # Env files hold secrets. Only the examples are committed.
 .env
 .env.*

@@ -11,7 +11,11 @@ const nextConfig: NextConfig = {
     if (!apiBaseUrl) {
       throw new Error('API_BASE_URL must be set in the Vercel project before building.');
     }
-    return [{ source: '/api/:path*', destination: `${apiBaseUrl.replace(/\/$/, '')}/api/:path*` }];
+    const base = apiBaseUrl.replace(/\/$/, '');
+    return [
+      { source: '/api/:path*', destination: `${base}/api/:path*` },
+      { source: '/docs/:path*', destination: `${base}/docs/:path*` },
+    ];
   },
 };
 
