@@ -36,7 +36,10 @@ _Avoid_: Payment, disbursement
 ₹1,000. If an Author's total Pending Royalty is below it, it rolls over to the next quarter instead of being paid out.
 
 **Next Payout Date**:
-The latest date the next Payout is due: 45 days after the current quarter ends.
+The due date of the next Payout still to come. While the previous quarter's window is open, that's the previous quarter's due date for an Author with a Payout coming in it: at or above the Payout Threshold, and not paid since that quarter ended. Otherwise it's the current quarter's due date, 45 days after the current quarter ends.
+
+**Below Threshold**:
+An Author whose total Pending Royalty is above ₹0 and under the Payout Threshold. Nothing is wrong: it rolls over to the next quarter.
 
 **Overdue**:
 An Author whose total Pending Royalty is at or above the Payout Threshold, and whose last Payout window passed without a Payout.

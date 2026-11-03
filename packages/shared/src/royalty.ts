@@ -55,10 +55,15 @@ function payoutDueDate(end: Date) {
   return new Date(end.getTime() + PAYOUT_WINDOW_DAYS * DAY_MS);
 }
 
-// The end of the latest quarter whose Payout window is over. The due date itself is still in the window.
+// The due date itself is still in the window.
+function isWindowOpen(end: Date, now: Date) {
+  return isoDate(now) <= isoDate(payoutDueDate(end));
+}
+
+// The end of the latest quarter whose Payout window is over.
 function lastClosedQuarterEnd(now: Date) {
   const previous = previousQuarterEnd(quarterEnd(now));
-  return isoDate(payoutDueDate(previous)) < isoDate(now) ? previous : previousQuarterEnd(previous);
+  return isWindowOpen(previous, now) ? previousQuarterEnd(previous) : previous;
 }
 
 export function bookRoyalty(book: RoyaltyBook): BookRoyalty {
@@ -83,17 +88,22 @@ export function royaltySummary(books: RoyaltyBook[], now: Date): RoyaltySummary 
   const totalPending = sum((book) => book.royaltyPending);
   const payoutDates = published.flatMap(({ lastPayoutDate }) => (lastPayoutDate ? [isoDate(lastPayoutDate)] : []));
   const lastPayoutDate = payoutDates.toSorted().at(-1) ?? null;
-  // A Payout made any time after that quarter ended covers its window, even one made after the window closed.
-  const paidSinceLastWindow = lastPayoutDate !== null && lastPayoutDate > isoDate(lastClosedQuarterEnd(now));
+  // Payouts don't record their quarter, so any Payout made after a quarter ended counts as covering it, even one made after its window closed.
+  const paidSince = (end: Date) => lastPayoutDate !== null && lastPayoutDate > isoDate(end);
+  const owedAPayout = totalPending !== null && totalPending >= PAYOUT_THRESHOLD;
+  const currentEnd = quarterEnd(now);
+  const previousEnd = previousQuarterEnd(currentEnd);
+  // The previous quarter's date only counts if a Payout could still arrive in its window.
+  const payoutComingInOpenWindow = owedAPayout && isWindowOpen(previousEnd, now) && !paidSince(previousEnd);
 
   return {
     totalEarned: sum((book) => book.royaltyEarned),
     totalPaid: sum((book) => book.royaltyPaid),
     totalPending,
     lastPayoutDate,
-    nextPayoutDate: isoDate(payoutDueDate(quarterEnd(now))),
+    nextPayoutDate: isoDate(payoutDueDate(payoutComingInOpenWindow ? previousEnd : currentEnd)),
     // With nothing pending there's nothing to roll over, so the threshold doesn't come into it.
     belowThreshold: totalPending !== null && totalPending > 0 && totalPending < PAYOUT_THRESHOLD,
-    overdue: totalPending !== null && totalPending >= PAYOUT_THRESHOLD && !paidSinceLastWindow,
+    overdue: owedAPayout && !paidSince(lastClosedQuarterEnd(now)),
   };
 }

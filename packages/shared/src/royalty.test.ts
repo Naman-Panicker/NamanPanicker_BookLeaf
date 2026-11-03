@@ -260,6 +260,55 @@ describe('the Next Payout Date', () => {
   it('is known even for an Author with no Books', () => {
     expect(royaltySummary([], NOW).nextPayoutDate).toBe('2026-05-15');
   });
+
+  describe("while the previous quarter's window is open", () => {
+    const paidOn = (date: string): RoyaltyBook => ({ ...BK001_WHISPERS, lastPayoutDate: new Date(date) });
+    const neverPaid = (royaltyPending: number): RoyaltyBook => ({ ...BK005_BETWEEN_TWO_TEMPLES, royaltyPending });
+    const IN_Q3_WINDOW = new Date('2026-11-05T10:00:00Z');
+
+    it.each([
+      ['the last moment of Q3, when Q2 2026 is long closed', '2026-09-30T23:59:59Z', '2026-11-14'],
+      ['the first moment of Q4', '2026-10-01T00:00:00Z', '2026-11-14'],
+      ['the last moment of the 45th day', '2026-11-14T23:59:59Z', '2026-11-14'],
+      ['the first moment after the window', '2026-11-15T00:00:00Z', '2027-02-14'],
+      ['a window that runs into the next year', '2027-01-15T10:00:00Z', '2027-02-14'],
+      ['the day after that one closes', '2027-02-15T10:00:00Z', '2027-05-15'],
+    ])('an Author who is owed a Payout, on %s', (_moment, now, expected) => {
+      expect(royaltySummary(ANANYA, new Date(now)).nextPayoutDate).toBe(expected);
+    });
+
+    it.each([
+      ['Priya', PRIYA],
+      ['Diya', DIYA],
+      ['Sneha', SNEHA],
+    ])('%s, who has money pending and no Payout since that quarter ended', (_name, books) => {
+      expect(royaltySummary(books, IN_Q3_WINDOW).nextPayoutDate).toBe('2026-11-14');
+    });
+
+    it.each([
+      ['Kavita, who is Below Threshold', KAVITA],
+      ['Farhan, who has nothing pending', FARHAN],
+      ['an Author with no published Book', [BK013_MIDNIGHT_IN_MYSORE]],
+      ['an Author with no Books', []],
+    ])("skips that quarter for %s, who has no Payout coming in it", (_name, books) => {
+      expect(royaltySummary(books, IN_Q3_WINDOW).nextPayoutDate).toBe('2027-02-14');
+    });
+
+    it('goes by the total pending across Books, starting at the threshold', () => {
+      expect(royaltySummary([neverPaid(1000)], IN_Q3_WINDOW).nextPayoutDate).toBe('2026-11-14');
+      expect(royaltySummary([neverPaid(999)], IN_Q3_WINDOW).nextPayoutDate).toBe('2027-02-14');
+      expect(royaltySummary([neverPaid(600), neverPaid(600)], IN_Q3_WINDOW).nextPayoutDate).toBe('2026-11-14');
+    });
+
+    it('treats a Payout made after that quarter ended as covering it', () => {
+      expect(royaltySummary([paidOn('2026-10-20')], IN_Q3_WINDOW).nextPayoutDate).toBe('2027-02-14');
+      expect(royaltySummary([paidOn('2026-10-01')], IN_Q3_WINDOW).nextPayoutDate).toBe('2027-02-14');
+    });
+
+    it("doesn't treat a Payout on that quarter's last day as covering it", () => {
+      expect(royaltySummary([paidOn('2026-09-30')], IN_Q3_WINDOW).nextPayoutDate).toBe('2026-11-14');
+    });
+  });
 });
 
 describe('Overdue', () => {
