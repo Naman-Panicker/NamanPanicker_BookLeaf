@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable no-restricted-globals -- deploy spike, deleted once ticket 01's checks pass */
+
 import {
   SPIKE_HEARTBEAT_EVENT,
   spikeCookieEchoResponseSchema,

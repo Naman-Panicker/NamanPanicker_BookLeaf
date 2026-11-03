@@ -48,6 +48,7 @@ describe('spike cookie', () => {
 
   it('reports the cookie once it has been set', async () => {
     // supertest talks plain http, and its cookie jar won't send a Secure cookie back over it.
+    // eslint-disable-next-line no-restricted-syntax -- deploy spike, deleted once ticket 01's checks pass
     const agent = request.agent(makeTestApp({ cookieSecure: false }));
     await agent.post('/api/spike/cookie');
 

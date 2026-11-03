@@ -1,4 +1,5 @@
 import bcrypt from 'bcryptjs';
+import request from 'supertest';
 import { createApp } from '../app';
 import type { Clock } from '../clock';
 import { createPrisma } from '../db';
@@ -41,6 +42,14 @@ export function makeTestApp(overrides: Partial<Parameters<typeof createApp>[0]> 
     publisher: recordingPublisher(),
     ...overrides,
   });
+}
+
+// Tests sign in through this, so only this helper knows how a session travels with a request.
+export async function signedInAgent(app: ReturnType<typeof makeTestApp>, email: string) {
+  const agent = request.agent(app);
+  const res = await agent.post('/api/session').send({ email, password: PASSWORD });
+  if (res.status !== 200) throw new Error(`Could not sign in ${email}: got ${res.status}`);
+  return agent;
 }
 
 export function createAuthor(overrides: { email?: string; name?: string; externalRef?: string } = {}) {

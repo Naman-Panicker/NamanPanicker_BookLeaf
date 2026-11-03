@@ -63,6 +63,7 @@ export function createApp({ cookieSecure, sessionSecret, prisma, clock }: AppOpt
 
   // Deploy spike (ticket 01): does a cookie set by Express survive the Vercel rewrite?
   app.post('/api/spike/cookie', (_req, res) => {
+    // eslint-disable-next-line no-restricted-syntax -- deploy spike, deleted once ticket 01's checks pass
     res.cookie(SPIKE_COOKIE, 'round-trip', {
       httpOnly: true,
       sameSite: 'lax',
@@ -74,6 +75,7 @@ export function createApp({ cookieSecure, sessionSecret, prisma, clock }: AppOpt
   });
 
   app.get('/api/spike/cookie', (req, res) => {
+    // eslint-disable-next-line no-restricted-syntax -- deploy spike, deleted once ticket 01's checks pass
     const received = typeof req.cookies[SPIKE_COOKIE] === 'string';
     res.json({ received } satisfies SpikeCookieEchoResponse);
   });

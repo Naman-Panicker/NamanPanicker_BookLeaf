@@ -9,6 +9,7 @@ import {
   PASSWORD,
   prisma,
   resetDatabase,
+  signedInAgent,
 } from './testing/harness';
 
 beforeEach(resetDatabase);
@@ -99,8 +100,7 @@ describe('the session cookie', () => {
 describe('the current user', () => {
   it('is an Author after an Author logs in', async () => {
     const author = await createAuthor({ email: 'priya@example.com', name: 'Priya Sharma' });
-    const agent = request.agent(makeTestApp());
-    await agent.post('/api/session').send({ email: 'priya@example.com', password: PASSWORD });
+    const agent = await signedInAgent(makeTestApp(), 'priya@example.com');
 
     const res = await agent.get('/api/session');
 
@@ -112,8 +112,7 @@ describe('the current user', () => {
 
   it('is an Admin after an Admin logs in', async () => {
     await createAdmin({ email: 'asha@example.com' });
-    const agent = request.agent(makeTestApp());
-    await agent.post('/api/session').send({ email: 'asha@example.com', password: PASSWORD });
+    const agent = await signedInAgent(makeTestApp(), 'asha@example.com');
 
     const res = await agent.get('/api/session');
 
@@ -123,8 +122,7 @@ describe('the current user', () => {
 
   it('returns 401 once the account no longer exists', async () => {
     const author = await createAuthor({ email: 'priya@example.com' });
-    const agent = request.agent(makeTestApp());
-    await agent.post('/api/session').send({ email: 'priya@example.com', password: PASSWORD });
+    const agent = await signedInAgent(makeTestApp(), 'priya@example.com');
     await prisma.author.delete({ where: { id: author.id } });
 
     const res = await agent.get('/api/session');
@@ -197,8 +195,7 @@ describe('without a valid session', () => {
   it('returns 401 once the session has expired', async () => {
     await createAuthor({ email: 'priya@example.com' });
     const clock = fakeClock();
-    const agent = request.agent(makeTestApp({ clock }));
-    await agent.post('/api/session').send({ email: 'priya@example.com', password: PASSWORD });
+    const agent = await signedInAgent(makeTestApp({ clock }), 'priya@example.com');
 
     clock.advanceDays(6);
     expect((await agent.get('/api/session')).status).toBe(200);
@@ -219,8 +216,7 @@ describe('without a valid session', () => {
 describe('with a valid session', () => {
   it('returns 404 in the shared shape for a URL that does not exist', async () => {
     await createAuthor({ email: 'priya@example.com' });
-    const agent = request.agent(makeTestApp());
-    await agent.post('/api/session').send({ email: 'priya@example.com', password: PASSWORD });
+    const agent = await signedInAgent(makeTestApp(), 'priya@example.com');
 
     const res = await agent.get('/api/tickets');
 
@@ -232,8 +228,7 @@ describe('with a valid session', () => {
 describe('logging out', () => {
   it('ends the session', async () => {
     await createAuthor({ email: 'priya@example.com' });
-    const agent = request.agent(makeTestApp());
-    await agent.post('/api/session').send({ email: 'priya@example.com', password: PASSWORD });
+    const agent = await signedInAgent(makeTestApp(), 'priya@example.com');
 
     const logout = await agent.delete('/api/session');
     expect(logout.status).toBe(204);
