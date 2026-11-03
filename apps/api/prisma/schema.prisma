@@ -7,6 +7,18 @@ datasource db {
   provider = "postgresql"
 }
 
+enum ProductionStage {
+  MANUSCRIPT_RECEIVED
+  EDITING
+  COVER_DESIGN
+  TYPESETTING
+  PROOFREADING
+  ISBN_ASSIGNMENT
+  PRINTING
+  DISTRIBUTION_SETUP
+  PUBLISHED_LIVE
+}
+
 model Author {
   id           String   @id @default(uuid())
   // The sample data's author ID, such as AUTH001.
@@ -19,6 +31,7 @@ model Author {
   joinedDate   DateTime @map("joined_date") @db.Date
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
+  books        Book[]
 
   @@map("authors")
 }
@@ -32,4 +45,32 @@ model Admin {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("admins")
+}
+
+// Money is in whole rupees, as in the sample data.
+model Book {
+  id              String          @id @default(uuid())
+  // The sample data's book ID, such as BK001.
+  externalRef     String          @unique @map("external_ref")
+  authorId        String          @map("author_id")
+  author          Author          @relation(fields: [authorId], references: [id])
+  title           String
+  isbn            String
+  genre           String
+  publicationDate DateTime?       @map("publication_date") @db.Date
+  productionStage ProductionStage @map("production_stage")
+  mrp             Int?
+  royaltyPerCopy  Int?            @map("royalty_per_copy")
+  copiesSold      Int             @map("copies_sold")
+  royaltyEarned   Int             @map("royalty_earned")
+  royaltyPaid     Int             @map("royalty_paid")
+  royaltyPending  Int             @map("royalty_pending")
+  lastPayoutDate  DateTime?       @map("last_payout_date") @db.Date
+  printPartner    String?         @map("print_partner")
+  availableOn     String[]        @map("available_on")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  @@index([authorId])
+  @@map("books")
 }

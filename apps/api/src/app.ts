@@ -14,6 +14,7 @@ import type { EventPublisher } from './events';
 import { createDocsRouter } from './http/docs';
 import { errorHandler, notFound } from './http/errors';
 import { createRoutes } from './http/routes';
+import { addBookRoutes } from './routes/books';
 import { addSessionRoutes } from './routes/session';
 
 export type AppOptions = {
@@ -57,6 +58,7 @@ export function createApp({ cookieSecure, sessionSecret, prisma, clock }: AppOpt
   );
 
   addSessionRoutes({ routes, prisma, sessions });
+  addBookRoutes({ routes, prisma, clock });
 
   app.use(routes.router);
   app.use(createDocsRouter(routes.specs));

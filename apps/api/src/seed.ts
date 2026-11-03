@@ -1,3 +1,4 @@
+import { PRODUCTION_STAGE_LABELS, type ProductionStage, productionStageSchema } from '@bookleaf/shared';
 import { z } from 'zod';
 import sampleData from '../prisma/sample-data.json';
 import { hashPassword } from './auth/passwords';
@@ -20,29 +21,90 @@ const sampleDataSchema = z.object({
       phone: z.string(),
       city: z.string(),
       joined_date: z.iso.date(),
+      books: z.array(
+        z.object({
+          book_id: z.string(),
+          title: z.string(),
+          isbn: z.string(),
+          genre: z.string(),
+          publication_date: z.iso.date().nullable(),
+          status: z.string(),
+          mrp: z.number().nullable(),
+          author_royalty_per_copy: z.number().nullable(),
+          total_copies_sold: z.number(),
+          total_royalty_earned: z.number(),
+          royalty_paid: z.number(),
+          royalty_pending: z.number(),
+          last_royalty_payout_date: z.iso.date().nullable(),
+          print_partner: z.string().nullable(),
+          available_on: z.array(z.string()),
+        }),
+      ),
     }),
   ),
 });
+
+// The sample data says "In Production - Cover Design" or "Published & Live".
+function parseProductionStage(status: string): ProductionStage {
+  const label = status.replace(/^In Production - /, '');
+  const stage = productionStageSchema.options.find((option) => PRODUCTION_STAGE_LABELS[option] === label);
+  if (!stage) throw new Error(`Unknown status in the sample data: ${status}`);
+  return stage;
+}
+
+function toDate(date: string | null) {
+  return date === null ? null : new Date(date);
+}
 
 export async function seed(prisma: PrismaClient) {
   const passwordHash = await hashPassword(DEMO_PASSWORD);
   const { authors } = sampleDataSchema.parse(sampleData);
 
-  for (const author of authors) {
-    const profile = {
-      name: author.name,
-      email: author.email.toLowerCase(),
-      phone: author.phone,
-      city: author.city,
-      joinedDate: new Date(author.joined_date),
-      passwordHash,
-    };
-    await prisma.author.upsert({
-      where: { externalRef: author.author_id },
-      create: { externalRef: author.author_id, ...profile },
-      update: profile,
-    });
-  }
+  // Each query crosses the network to Neon, so waiting for them one by one takes far too long.
+  await Promise.all(
+    authors.map(async (author) => {
+      const profile = {
+        name: author.name,
+        email: author.email.toLowerCase(),
+        phone: author.phone,
+        city: author.city,
+        joinedDate: new Date(author.joined_date),
+        passwordHash,
+      };
+      const { id: authorId } = await prisma.author.upsert({
+        where: { externalRef: author.author_id },
+        create: { externalRef: author.author_id, ...profile },
+        update: profile,
+      });
+
+      await Promise.all(
+        author.books.map((book) => {
+          const fields = {
+            authorId,
+            title: book.title,
+            isbn: book.isbn,
+            genre: book.genre,
+            publicationDate: toDate(book.publication_date),
+            productionStage: parseProductionStage(book.status),
+            mrp: book.mrp,
+            royaltyPerCopy: book.author_royalty_per_copy,
+            copiesSold: book.total_copies_sold,
+            royaltyEarned: book.total_royalty_earned,
+            royaltyPaid: book.royalty_paid,
+            royaltyPending: book.royalty_pending,
+            lastPayoutDate: toDate(book.last_royalty_payout_date),
+            printPartner: book.print_partner,
+            availableOn: book.available_on,
+          };
+          return prisma.book.upsert({
+            where: { externalRef: book.book_id },
+            create: { externalRef: book.book_id, ...fields },
+            update: fields,
+          });
+        }),
+      );
+    }),
+  );
 
   for (const { name, email } of ADMINS) {
     await prisma.admin.upsert({
@@ -52,5 +114,9 @@ export async function seed(prisma: PrismaClient) {
     });
   }
 
-  return { authors: authors.map(({ email }) => email), admins: ADMINS.map(({ email }) => email) };
+  return {
+    authors: authors.map(({ email }) => email),
+    admins: ADMINS.map(({ email }) => email),
+    books: authors.flatMap(({ books }) => books.map(({ book_id }) => book_id)),
+  };
 }

@@ -3,6 +3,7 @@ import request from 'supertest';
 import { createApp } from '../app';
 import type { Clock } from '../clock';
 import { createPrisma } from '../db';
+import type { Prisma } from '../generated/prisma/client';
 import type { AppEvent, EventPublisher } from '../events';
 import { testDatabaseUrl } from './test-database';
 
@@ -62,6 +63,26 @@ export function createAuthor(overrides: { email?: string; name?: string; externa
       city: 'Pune',
       joinedDate: new Date('2024-01-01'),
       passwordHash,
+      ...overrides,
+    },
+  });
+}
+
+export type BookFixture = Partial<Prisma.BookUncheckedCreateInput>;
+
+export function createBook(authorId: string, overrides: BookFixture = {}) {
+  return prisma.book.create({
+    data: {
+      authorId,
+      externalRef: 'BK-TEST-1',
+      title: 'Test Book',
+      isbn: '978-93-5XXXX-00-0',
+      genre: 'Fiction',
+      productionStage: 'PUBLISHED_LIVE',
+      copiesSold: 0,
+      royaltyEarned: 0,
+      royaltyPaid: 0,
+      royaltyPending: 0,
       ...overrides,
     },
   });

@@ -1,5 +1,6 @@
 import {
   apiErrorSchema,
+  myBooksResponseSchema,
   sessionResponseSchema,
   type LoginRequest,
   validationDetailsSchema,
@@ -91,4 +92,9 @@ export async function findCurrentUser() {
     if (error instanceof ApiRequestError && error.code === 'UNAUTHENTICATED') return null;
     throw error;
   }
+}
+
+export async function getMyBooks() {
+  const res = await authenticated('/api/books');
+  return myBooksResponseSchema.parse(await res.json());
 }
