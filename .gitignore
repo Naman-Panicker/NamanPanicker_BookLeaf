@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+coverage/
+.vercel/
+.DS_Store
+
+# Env files hold secrets. Only the examples are committed.
+.env
+.env.*
+!.env.example
+
+docs/
+.scratch/

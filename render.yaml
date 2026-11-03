@@ -1,0 +1,14 @@
+# Render Blueprint for the Express API (ADR-0001). Ohio matches the Neon region (us-east-2).
+services:
+  - type: web
+    name: bookleaf-api
+    runtime: node
+    region: ohio
+    plan: free
+    # NODE_ENV=production would make pnpm skip devDependencies, and the build needs tsup.
+    buildCommand: corepack enable && NODE_ENV=development pnpm install --frozen-lockfile && pnpm --filter @bookleaf/api build
+    startCommand: pnpm --filter @bookleaf/api start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
