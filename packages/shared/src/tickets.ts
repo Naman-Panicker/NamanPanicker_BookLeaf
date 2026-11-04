@@ -232,3 +232,10 @@ export const adminWorkspaceResponseSchema = adminTicketResponseSchema.extend({
   royalty: royaltySummarySchema,
 });
 export type AdminWorkspaceResponse = z.infer<typeof adminWorkspaceResponseSchema>;
+
+export const ticketDraftResponseSchema = z.object({
+  // Null when there's no Draft to offer. The flag says whether that's because the AI failed.
+  draft: z.string().nullable(),
+  draftUnavailable: z.boolean(),
+});
+export type TicketDraftResponse = z.infer<typeof ticketDraftResponseSchema>;

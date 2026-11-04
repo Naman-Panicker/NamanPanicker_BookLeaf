@@ -2,8 +2,11 @@ packages:
   - apps/*
   - packages/*
 allowBuilds:
+  # Neither needs its install script to run.
+  '@google/genai': false
   '@prisma/engines': true
   # Install telemetry from swagger-ui-dist. Nothing needs it.
   '@scarf/scarf': false
   esbuild: true
   prisma: true
+  protobufjs: false

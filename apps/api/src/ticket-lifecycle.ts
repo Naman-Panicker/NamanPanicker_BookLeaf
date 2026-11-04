@@ -19,9 +19,12 @@ type StatusMove = { from: TicketStatus; to: TicketStatus };
 const MESSAGE_ATTEMPTS = 3;
 
 export const ticketJustChanged = () => conflict('This Ticket has just changed. Reload the page and try again.');
+export const ticketClosed = () => conflict("This Ticket is Closed, so it can't take new Messages.");
+
+export const CLEARED_DRAFT = { draftBody: null, draftAuthorMessageId: null } satisfies Prisma.TicketUpdateManyMutationInput;
 
 const REJECTIONS: Record<TransitionRejection, () => ApiError> = {
-  TICKET_CLOSED: () => conflict("This Ticket is Closed, so it can't take new Messages."),
+  TICKET_CLOSED: ticketClosed,
   NOT_RESOLVED: () => conflict('Only a Resolved Ticket can be confirmed as solved.'),
   // Routes check the role first. To anyone else, the action doesn't exist.
   ROLE_NOT_ALLOWED: notFound,
@@ -103,8 +106,9 @@ export async function sendMessage({ prisma, clock }: Deps, actor: Session, ticke
     const move = await decideMove(prisma, actor, ticketId, { type: 'SEND_MESSAGE' });
     const now = clock.now();
     const record = await prisma.$transaction(async (tx) => {
-      const authorChanges = actor.role === 'AUTHOR' ? { latestAuthorMessageAt: now } : {};
-      if (!(await recordMove(tx, actor, ticketId, move, now, authorChanges))) return null;
+      // The Admin's Message answers the thread, so a Draft kept after it would only repeat it.
+      const threadChanges = actor.role === 'AUTHOR' ? { latestAuthorMessageAt: now } : CLEARED_DRAFT;
+      if (!(await recordMove(tx, actor, ticketId, move, now, threadChanges))) return null;
       return tx.message.create({
         data: { ticketId, ...actorColumn(actor), body, createdAt: now },
         select: messageSelect,

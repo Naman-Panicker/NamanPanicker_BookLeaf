@@ -15,7 +15,7 @@ import type { Clock } from './clock';
 import type { PrismaClient } from './db';
 import type { Prisma } from './generated/prisma/client';
 import { conflict, notFound } from './http/errors';
-import { ticketJustChanged } from './ticket-lifecycle';
+import { CLEARED_DRAFT, ticketJustChanged } from './ticket-lifecycle';
 
 type Deps = { prisma: PrismaClient; clock: Clock };
 
@@ -246,6 +246,8 @@ export function overrideCategory(deps: Deps, adminId: string, ticketId: string, 
       changes: {
         category,
         categorySource: 'ADMIN',
+        // A Draft follows the policy for its Category, so a different Category needs a new one.
+        ...(triage.category === category ? {} : CLEARED_DRAFT),
         // Floors depend on the Category, so a corrected Category can raise or lower the AI's Priority.
         ...(await priorityChanges(deps, triage, category, triage.suggestedPriority)),
       },

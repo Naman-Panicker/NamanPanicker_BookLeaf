@@ -13,8 +13,8 @@
     "db:seed": "prisma db seed"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^1.4.0",
     "@bookleaf/shared": "workspace:*",
+    "@google/genai": "^2.32.0",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
     "bcryptjs": "^3.0.3",

@@ -15,6 +15,7 @@ import {
   type SetPriorityRequest,
   type SetTicketStatusRequest,
   type LoginRequest,
+  ticketDraftResponseSchema,
   ticketEventsResponseSchema,
   ticketMessagesResponseSchema,
   validationDetailsSchema,
@@ -206,4 +207,16 @@ export async function retryClassification(ticketId: string) {
     method: 'POST',
   });
   return adminTicketResponseSchema.parse(await res.json()).ticket;
+}
+
+export async function getTicketDraft(ticketId: string) {
+  const res = await authenticated(`/api/admin/tickets/${encodeURIComponent(ticketId)}/draft`);
+  return ticketDraftResponseSchema.parse(await res.json());
+}
+
+export async function regenerateTicketDraft(ticketId: string) {
+  const res = await authenticated(`/api/admin/tickets/${encodeURIComponent(ticketId)}/draft-regeneration`, {
+    method: 'POST',
+  });
+  return ticketDraftResponseSchema.parse(await res.json());
 }

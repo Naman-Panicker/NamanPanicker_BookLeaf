@@ -1,14 +1,14 @@
-import { createAnthropicAiClient } from './ai-client';
+import { createGeminiAiClient } from './ai-client';
 import { createApp } from './app';
 import { systemClock } from './clock';
 import { loadConfig } from './config';
 import { createPrisma } from './db';
 import { noopPublisher } from './events';
 
-const { databaseUrl, sessionSecret, port, cookieSecure, anthropicApiKey, aiModel } = loadConfig(process.env);
+const { databaseUrl, sessionSecret, port, cookieSecure, geminiApiKey, aiModel } = loadConfig(process.env);
 
-if (!anthropicApiKey) {
-  console.warn('ANTHROPIC_API_KEY is not set, so new Tickets will stay Unclassified.');
+if (!geminiApiKey) {
+  console.warn('GEMINI_API_KEY is not set, so new Tickets will stay Unclassified and there will be no Drafts.');
 }
 
 const { app, classifier } = createApp({
@@ -17,7 +17,7 @@ const { app, classifier } = createApp({
   prisma: createPrisma(databaseUrl),
   clock: systemClock,
   publisher: noopPublisher,
-  ai: createAnthropicAiClient({ apiKey: anthropicApiKey, model: aiModel }),
+  ai: createGeminiAiClient({ apiKey: geminiApiKey, model: aiModel }),
 });
 
 app.listen(port, () => {

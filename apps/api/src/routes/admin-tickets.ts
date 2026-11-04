@@ -16,6 +16,7 @@ import {
   setPriorityRequestSchema,
   setTicketStatusRequestSchema,
   ticketParamsSchema,
+  ticketDraftResponseSchema,
   ticketStatusSchema,
 } from '@bookleaf/shared';
 import type { z } from 'zod';
@@ -23,6 +24,7 @@ import { currentAdminId, currentSession } from '../auth/sessions';
 import { type Classifier, overrideCategory, overridePriority, resetClassification } from '../classification';
 import type { Clock } from '../clock';
 import type { PrismaClient } from '../db';
+import type { Drafts } from '../drafts';
 import type { Prisma } from '../generated/prisma/client';
 import { notFound } from '../http/errors';
 import type { createRoutes } from '../http/routes';
@@ -34,6 +36,7 @@ type Deps = {
   prisma: PrismaClient;
   clock: Clock;
   classifier: Classifier;
+  drafts: Drafts;
 };
 
 const queueTicketSelect = {
@@ -90,7 +93,7 @@ function statusFilter(status: z.output<typeof adminQueueQuerySchema>['status']):
   return status ?? { in: ticketStatusSchema.options.filter(isUnresolved) };
 }
 
-export function addAdminTicketRoutes({ routes, prisma, clock, classifier }: Deps) {
+export function addAdminTicketRoutes({ routes, prisma, clock, classifier, drafts }: Deps) {
   const adminTicket = async (ticketId: string) => {
     const record = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId }, select: queueTicketSelect });
     return { ticket: toAdminQueueTicket(record) } satisfies AdminTicketResponse;
@@ -241,6 +244,43 @@ export function addAdminTicketRoutes({ routes, prisma, clock, classifier }: Deps
       const response = await adminTicket(params.ticketId);
       res.once('close', () => classifier.enqueue(params.ticketId));
       res.status(202).json(response);
+    },
+  );
+
+  routes.add(
+    {
+      method: 'get',
+      path: '/api/admin/tickets/:ticketId/draft',
+      summary: "Get a Ticket's Draft, writing one if there is none or it's a Stale Draft. It is never sent automatically",
+      tag: 'Admin',
+      adminOnly: true,
+      params: ticketParamsSchema,
+      responses: {
+        200: { description: 'The Draft, or none, flagged if the AI failed.', schema: ticketDraftResponseSchema },
+        404: { description: 'The Ticket does not exist, or the caller is not an Admin.', schema: apiErrorSchema },
+      },
+    },
+    async (_req, res, { params }) => {
+      res.json(await drafts.getOrCreate(params.ticketId));
+    },
+  );
+
+  routes.add(
+    {
+      method: 'post',
+      path: '/api/admin/tickets/:ticketId/draft-regeneration',
+      summary: 'Write a new Draft for a Ticket, replacing the cached one',
+      tag: 'Admin',
+      adminOnly: true,
+      params: ticketParamsSchema,
+      responses: {
+        200: { description: 'The new Draft, or none, flagged if the AI failed.', schema: ticketDraftResponseSchema },
+        404: { description: 'The Ticket does not exist, or the caller is not an Admin.', schema: apiErrorSchema },
+        409: { description: 'The Ticket is Closed.', schema: apiErrorSchema },
+      },
+    },
+    async (_req, res, { params }) => {
+      res.json(await drafts.regenerate(params.ticketId));
     },
   );
 }

@@ -26,7 +26,7 @@ import Link from 'next/link';
 import { notFound, useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Figure } from '@/components/figure';
-import { MessageEditor } from '@/components/message-editor';
+import { DraftEditor } from '@/components/draft-editor';
 import { TicketStatusBadge } from '@/components/ticket-status-badge';
 import { TicketThread } from '@/components/ticket-thread';
 import { CategoryTriage, PriorityTriage } from '@/components/triage-badges';
@@ -116,7 +116,7 @@ export default function AdminTicketPage() {
               This Ticket is Closed, so it can&apos;t take new Messages. Set another status to reopen it.
             </p>
           ) : (
-            <MessageEditor ticketId={ticket.id} label="Message to the Author" onChanged={reload} />
+            <DraftEditor key={ticket.id} ticketId={ticket.id} onChanged={reload} />
           )}
         </div>
         <aside className="flex flex-col gap-6">

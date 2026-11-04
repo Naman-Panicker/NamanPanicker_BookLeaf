@@ -12,6 +12,7 @@ import { createSessions } from './auth/sessions';
 import { createClassifier } from './classification';
 import type { Clock } from './clock';
 import type { PrismaClient } from './db';
+import { createDrafts } from './drafts';
 import type { EventPublisher } from './events';
 import { createDocsRouter } from './http/docs';
 import { errorHandler, notFound } from './http/errors';
@@ -37,6 +38,7 @@ const HEARTBEAT_MS = 25_000;
 export function createApp({ cookieSecure, sessionSecret, prisma, clock, ai }: AppOptions) {
   const app = express();
   const classifier = createClassifier({ prisma, clock, ai });
+  const drafts = createDrafts({ prisma, clock, ai });
 
   // Vercel caches rewritten responses unless told otherwise (ADR-0003).
   app.use((_req, res, next) => {
@@ -66,7 +68,7 @@ export function createApp({ cookieSecure, sessionSecret, prisma, clock, ai }: Ap
   addSessionRoutes({ routes, prisma, sessions });
   addBookRoutes({ routes, prisma, clock });
   addTicketRoutes({ routes, prisma, clock, classifier });
-  addAdminTicketRoutes({ routes, prisma, clock, classifier });
+  addAdminTicketRoutes({ routes, prisma, clock, classifier, drafts });
 
   app.use(routes.router);
   app.use(createDocsRouter(routes.specs));

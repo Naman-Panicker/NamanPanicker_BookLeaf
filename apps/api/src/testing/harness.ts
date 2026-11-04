@@ -44,15 +44,13 @@ export function recordingPublisher() {
 // Gives each answer in turn, then keeps repeating the last. An Error makes that attempt fail.
 export function fakeAi(...answers: unknown[]) {
   const prompts: AiPrompt[] = [];
-  return {
-    prompts,
-    async classify(prompt: AiPrompt) {
-      prompts.push(prompt);
-      const answer = answers[Math.min(prompts.length, answers.length) - 1];
-      if (answer instanceof Error) throw answer;
-      return answer;
-    },
-  } satisfies AiClient & Record<string, unknown>;
+  const answerNext = async (prompt: AiPrompt) => {
+    prompts.push(prompt);
+    const answer = answers[Math.min(prompts.length, answers.length) - 1];
+    if (answer instanceof Error) throw answer;
+    return answer;
+  };
+  return { prompts, classify: answerNext, draft: answerNext } satisfies AiClient & Record<string, unknown>;
 }
 
 // Doesn't answer until the test says so, to play out what happens while the AI is thinking.
@@ -65,19 +63,24 @@ export function heldAi(answer: unknown) {
   const asked = new Promise<void>((resolve) => {
     noteAsked = resolve;
   });
+  let timesAsked = 0;
+  const answerWhenReleased = async () => {
+    timesAsked += 1;
+    noteAsked();
+    await released;
+    return answer;
+  };
   return {
     asked,
     release: () => release(),
-    async classify() {
-      noteAsked();
-      await released;
-      return answer;
-    },
+    timesAsked: () => timesAsked,
+    classify: answerWhenReleased,
+    draft: answerWhenReleased,
   } satisfies AiClient & Record<string, unknown>;
 }
 
 // The default, so tests about something else never have background work writing to the database.
-const silentAi: AiClient = { classify: () => new Promise(() => {}) };
+const silentAi: AiClient = { classify: () => new Promise(() => {}), draft: () => new Promise(() => {}) };
 
 type AppOverrides = Partial<Parameters<typeof createApp>[0]>;
 

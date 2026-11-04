@@ -152,6 +152,9 @@ model Ticket {
   priorityFloor          PriorityFloor?        @map("priority_floor")
   classificationAttempts Int                   @default(0) @map("classification_attempts")
   classificationError    String?               @map("classification_error")
+  draftBody              String?               @map("draft_body")
+  // The Author Message the Draft was written from. A later one makes it a Stale Draft.
+  draftAuthorMessageId   String?               @map("draft_author_message_id")
   latestAuthorMessageAt  DateTime              @map("latest_author_message_at")
   // The "last update" Authors see. updatedAt won't do, because Admin-only changes also move it.
   lastUpdateAt           DateTime              @map("last_update_at")

@@ -1,51 +1,75 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { categorySchema, prioritySchema } from '@bookleaf/shared';
+import { FinishReason, GoogleGenAI, type GenerateContentResponse } from '@google/genai';
 
 export type AiPrompt = { system: string; user: string };
+
+// Stops an Author's text from closing the tag around it and passing the rest off as instructions.
+export function escapeTags(text: string) {
+  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
 
 export type AiClient = {
   // Resolves to whatever came back. The caller checks it, so a malformed answer fails the same way from any client.
   classify(prompt: AiPrompt): Promise<unknown>;
+  draft(prompt: AiPrompt): Promise<unknown>;
 };
 
-// Room for adaptive thinking as well as the short answer, because thinking counts towards the limit.
+// Room for thinking as well as the answer, because thinking counts towards the limit.
 const CLASSIFY_MAX_TOKENS = 1024;
+const DRAFT_MAX_TOKENS = 4096;
 const ATTEMPT_TIMEOUT_MS = 20_000;
+// An Admin is waiting and nothing else tries again, so a Draft gets longer and one retry from the SDK.
+const DRAFT_HTTP_OPTIONS = { timeout: 30_000, retryOptions: { attempts: 2 } };
 
-// Written out, because the SDK's zodOutputFormat turns an enum into a description, which restricts nothing.
 const CLASSIFICATION_FORMAT = {
-  type: 'json_schema',
-  schema: {
-    type: 'object',
-    properties: {
-      category: { type: 'string', enum: categorySchema.options },
-      priority: { type: 'string', enum: prioritySchema.options },
-    },
-    required: ['category', 'priority'],
-    additionalProperties: false,
+  type: 'object',
+  properties: {
+    category: { type: 'string', enum: categorySchema.options },
+    priority: { type: 'string', enum: prioritySchema.options },
   },
-} satisfies Anthropic.JSONOutputFormat;
+  required: ['category', 'priority'],
+};
 
-export function createAnthropicAiClient({ apiKey, model }: { apiKey: string | null; model: string }): AiClient {
-  // Without a key the SDK would go looking for other credentials on the machine, and the key comes from the environment only.
-  if (!apiKey) return { classify: () => Promise.reject(new Error('ANTHROPIC_API_KEY is not set.')) };
+// A refusal or a cut-off answer has nothing worth reading, and saying why helps whoever reads the error.
+function textOfFinished(response: GenerateContentResponse) {
+  const finishReason = response.candidates?.[0]?.finishReason;
+  if (finishReason !== FinishReason.STOP) {
+    throw new Error(`The AI stopped early: ${finishReason ?? response.promptFeedback?.blockReason ?? 'no answer'}.`);
+  }
+  return response.text;
+}
 
-  // Classification counts its own attempts, so the SDK mustn't multiply them with retries of its own.
-  const client = new Anthropic({ apiKey, maxRetries: 0, timeout: ATTEMPT_TIMEOUT_MS });
+export function createGeminiAiClient({ apiKey, model }: { apiKey: string | null; model: string }): AiClient {
+  // The SDK won't start without a key, and the API has to.
+  if (!apiKey) {
+    const noKey = () => Promise.reject(new Error('GEMINI_API_KEY is not set.'));
+    return { classify: noKey, draft: noKey };
+  }
+
+  // Classification counts its own attempts, so it leaves the SDK's retries off, which is their default.
+  const client = new GoogleGenAI({ apiKey, httpOptions: { timeout: ATTEMPT_TIMEOUT_MS } });
   return {
     async classify({ system, user }) {
-      const message = await client.messages.create({
+      const response = await client.models.generateContent({
         model,
-        max_tokens: CLASSIFY_MAX_TOKENS,
-        system,
-        messages: [{ role: 'user', content: user }],
-        output_config: { effort: 'low', format: CLASSIFICATION_FORMAT },
+        contents: user,
+        config: {
+          systemInstruction: system,
+          maxOutputTokens: CLASSIFY_MAX_TOKENS,
+          responseMimeType: 'application/json',
+          responseJsonSchema: CLASSIFICATION_FORMAT,
+        },
       });
-      // A refusal or a cut-off answer has nothing worth reading, and saying why helps whoever reads the error.
-      if (message.stop_reason !== 'end_turn') throw new Error(`The AI stopped early: ${message.stop_reason}.`);
-      // Found by type, because thinking blocks can come first.
-      const answer = message.content.find((block) => block.type === 'text');
-      return answer && JSON.parse(answer.text);
+      const answer = textOfFinished(response);
+      return answer && JSON.parse(answer);
+    },
+    async draft({ system, user }) {
+      const response = await client.models.generateContent({
+        model,
+        contents: user,
+        config: { systemInstruction: system, maxOutputTokens: DRAFT_MAX_TOKENS, httpOptions: DRAFT_HTTP_OPTIONS },
+      });
+      return textOfFinished(response);
     },
   };
 }
