@@ -10,8 +10,7 @@ import {
   type MyBooksResponse,
   royaltySummary,
 } from '@bookleaf/shared';
-import type { Response } from 'express';
-import { currentSession } from '../auth/sessions';
+import { currentAuthorId } from '../auth/sessions';
 import type { Clock } from '../clock';
 import type { PrismaClient } from '../db';
 import type { Book as BookRecord } from '../generated/prisma/client';
@@ -23,13 +22,6 @@ type Deps = {
   prisma: PrismaClient;
   clock: Clock;
 };
-
-// These routes are about the caller's own Books. An Admin has none, so to them the routes don't exist.
-function currentAuthorId(res: Response) {
-  const { id, role } = currentSession(res);
-  if (role !== 'AUTHOR') throw notFound();
-  return id;
-}
 
 function toBook(record: BookRecord): Book {
   return {

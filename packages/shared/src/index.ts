@@ -5,3 +5,4 @@ export * from './production-stage';
 export * from './royalty';
 export * from './session';
 export * from './spike';
+export * from './tickets';

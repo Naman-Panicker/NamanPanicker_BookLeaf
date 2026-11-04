@@ -11,6 +11,13 @@ const calendarDate = new Intl.DateTimeFormat('en-IN', {
   timeZone: 'UTC',
 });
 
+// A moment in time, unlike a calendar date, reads best in the Author's own time zone.
+const dateTime = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+
+export function formatDateTime(moment: string) {
+  return dateTime.format(new Date(moment));
+}
+
 export function formatRupees(amount: number | null) {
   return amount === null ? NOT_APPLICABLE : rupees.format(amount);
 }

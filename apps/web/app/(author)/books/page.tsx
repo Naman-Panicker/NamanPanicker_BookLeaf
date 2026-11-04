@@ -8,6 +8,7 @@ import {
   PRODUCTION_STAGE_LABELS,
   type RoyaltySummary,
 } from '@bookleaf/shared';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -84,7 +85,11 @@ function RoyaltyStrip({ royalty }: { royalty: RoyaltySummary }) {
         {royalty.overdue && (
           <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
             Your Pending Royalty of {formatRupees(royalty.totalPending)} is Overdue: our records show the last
-            Payout window closed without a Payout. Please raise a Ticket and we&apos;ll look into it.
+            Payout window closed without a Payout. Please{' '}
+            <Link href="/tickets/new" className="underline underline-offset-4">
+              raise a Ticket
+            </Link>{' '}
+            and we&apos;ll look into it.
           </p>
         )}
       </CardContent>

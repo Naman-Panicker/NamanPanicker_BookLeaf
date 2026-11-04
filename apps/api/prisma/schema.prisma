@@ -19,30 +19,66 @@ enum ProductionStage {
   PUBLISHED_LIVE
 }
 
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum Category {
+  ROYALTY_PAYMENTS
+  ISBN_METADATA
+  PRINTING_QUALITY
+  DISTRIBUTION_AVAILABILITY
+  BOOK_STATUS_PRODUCTION
+  GENERAL_INQUIRY
+}
+
+enum Priority {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum ClassificationSource {
+  AI
+  ADMIN
+}
+
+enum PriorityFloor {
+  ISBN_METADATA
+  OVERDUE_ROYALTY
+}
+
 model Author {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   // The sample data's author ID, such as AUTH001.
-  externalRef  String   @unique @map("external_ref")
+  externalRef  String    @unique @map("external_ref")
   name         String
-  email        String   @unique
-  passwordHash String   @map("password_hash")
+  email        String    @unique
+  passwordHash String    @map("password_hash")
   phone        String
   city         String
-  joinedDate   DateTime @map("joined_date") @db.Date
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  joinedDate   DateTime  @map("joined_date") @db.Date
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
   books        Book[]
+  tickets      Ticket[]
+  messages     Message[]
 
   @@map("authors")
 }
 
 model Admin {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   name         String
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  messages     Message[]
 
   @@map("admins")
 }
@@ -70,7 +106,59 @@ model Book {
   availableOn     String[]        @map("available_on")
   createdAt       DateTime        @default(now()) @map("created_at")
   updatedAt       DateTime        @updatedAt @map("updated_at")
+  tickets         Ticket[]
 
   @@index([authorId])
   @@map("books")
+}
+
+model Ticket {
+  id                     String                @id @default(uuid())
+  // Shown as BL-1042. The migration starts the sequence at 1001.
+  referenceNumber        Int                   @unique @default(autoincrement()) @map("reference_number")
+  authorId               String                @map("author_id")
+  author                 Author                @relation(fields: [authorId], references: [id])
+  // No Book means General / Account Level.
+  bookId                 String?               @map("book_id")
+  book                   Book?                 @relation(fields: [bookId], references: [id], onDelete: Restrict)
+  subject                String
+  status                 TicketStatus          @default(OPEN)
+  // The AI's suggestions are kept apart from the current values, which an Admin can override.
+  suggestedCategory      Category?             @map("suggested_category")
+  suggestedPriority      Priority?             @map("suggested_priority")
+  // A null Category or Priority means the Ticket is Unclassified.
+  category               Category?
+  priority               Priority?
+  categorySource         ClassificationSource? @map("category_source")
+  prioritySource         ClassificationSource? @map("priority_source")
+  priorityFloor          PriorityFloor?        @map("priority_floor")
+  classificationAttempts Int                   @default(0) @map("classification_attempts")
+  classificationError    String?               @map("classification_error")
+  latestAuthorMessageAt  DateTime              @map("latest_author_message_at")
+  // The "last update" Authors see. updatedAt won't do, because Admin-only changes also move it.
+  lastUpdateAt           DateTime              @map("last_update_at")
+  createdAt              DateTime              @default(now()) @map("created_at")
+  updatedAt              DateTime              @updatedAt @map("updated_at")
+  messages               Message[]
+
+  @@index([authorId])
+  @@index([bookId])
+  @@map("tickets")
+}
+
+// Written by either an Author or an Admin. The migration adds a check that exactly one is set.
+model Message {
+  id        String   @id @default(uuid())
+  ticketId  String   @map("ticket_id")
+  ticket    Ticket   @relation(fields: [ticketId], references: [id])
+  authorId  String?  @map("author_id")
+  author    Author?  @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  adminId   String?  @map("admin_id")
+  admin     Admin?   @relation(fields: [adminId], references: [id], onDelete: Restrict)
+  body      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([ticketId, createdAt])
+  @@map("messages")
 }

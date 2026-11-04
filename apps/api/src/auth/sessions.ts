@@ -2,7 +2,7 @@ import { type Role, roleSchema } from '@bookleaf/shared';
 import type { CookieOptions, RequestHandler, Response } from 'express';
 import { errors, jwtVerify, SignJWT } from 'jose';
 import type { Clock } from '../clock';
-import { unauthenticated } from '../http/errors';
+import { notFound, unauthenticated } from '../http/errors';
 
 export type Session = { id: string; role: Role };
 
@@ -65,4 +65,11 @@ export type Sessions = ReturnType<typeof createSessions>;
 // For handlers behind requireSession. Using it on a public route returns undefined.
 export function currentSession(res: Response): Session {
   return res.locals.session as Session;
+}
+
+// For routes about the caller's own records. An Admin has none, so to them the routes don't exist.
+export function currentAuthorId(res: Response) {
+  const { id, role } = currentSession(res);
+  if (role !== 'AUTHOR') throw notFound();
+  return id;
 }

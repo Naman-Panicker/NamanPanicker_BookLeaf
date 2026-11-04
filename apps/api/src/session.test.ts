@@ -152,7 +152,7 @@ describe('without a valid session', () => {
   });
 
   it('returns 401 for a URL that does not exist, so logged-out callers can not map the API', async () => {
-    const res = await request(makeTestApp()).get('/api/tickets');
+    const res = await request(makeTestApp()).get('/api/no-such-route');
 
     expect(res.status).toBe(401);
     expect(res.body).toEqual(unauthenticated);
@@ -218,7 +218,7 @@ describe('with a valid session', () => {
     await createAuthor({ email: 'priya@example.com' });
     const agent = await signedInAgent(makeTestApp(), 'priya@example.com');
 
-    const res = await agent.get('/api/tickets');
+    const res = await agent.get('/api/no-such-route');
 
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: { code: 'NOT_FOUND', message: 'Not found.', details: null } });

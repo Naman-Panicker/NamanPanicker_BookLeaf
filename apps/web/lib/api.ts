@@ -1,8 +1,12 @@
 import {
   apiErrorSchema,
+  authorTicketResponseSchema,
+  type CreateTicketRequest,
   myBooksResponseSchema,
+  myTicketsResponseSchema,
   sessionResponseSchema,
   type LoginRequest,
+  ticketMessagesResponseSchema,
   validationDetailsSchema,
 } from '@bookleaf/shared';
 
@@ -97,4 +101,28 @@ export async function findCurrentUser() {
 export async function getMyBooks() {
   const res = await authenticated('/api/books');
   return myBooksResponseSchema.parse(await res.json());
+}
+
+export async function createTicket(ticket: CreateTicketRequest) {
+  const res = await authenticated('/api/tickets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(ticket),
+  });
+  return authorTicketResponseSchema.parse(await res.json()).ticket;
+}
+
+export async function getMyTickets() {
+  const res = await authenticated('/api/tickets');
+  return myTicketsResponseSchema.parse(await res.json()).tickets;
+}
+
+export async function getTicket(ticketId: string) {
+  const res = await authenticated(`/api/tickets/${encodeURIComponent(ticketId)}`);
+  return authorTicketResponseSchema.parse(await res.json()).ticket;
+}
+
+export async function getTicketMessages(ticketId: string) {
+  const res = await authenticated(`/api/tickets/${encodeURIComponent(ticketId)}/messages`);
+  return ticketMessagesResponseSchema.parse(await res.json()).messages;
 }

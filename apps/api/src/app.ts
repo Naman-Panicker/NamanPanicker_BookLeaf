@@ -16,6 +16,7 @@ import { errorHandler, notFound } from './http/errors';
 import { createRoutes } from './http/routes';
 import { addBookRoutes } from './routes/books';
 import { addSessionRoutes } from './routes/session';
+import { addTicketRoutes } from './routes/tickets';
 
 export type AppOptions = {
   cookieSecure: boolean;
@@ -59,6 +60,7 @@ export function createApp({ cookieSecure, sessionSecret, prisma, clock }: AppOpt
 
   addSessionRoutes({ routes, prisma, sessions });
   addBookRoutes({ routes, prisma, clock });
+  addTicketRoutes({ routes, prisma, clock });
 
   app.use(routes.router);
   app.use(createDocsRouter(routes.specs));
