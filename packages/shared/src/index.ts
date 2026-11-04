@@ -1,6 +1,7 @@
 export * from './books';
 export * from './errors';
 export * from './health';
+export * from './priority-resolution';
 export * from './production-stage';
 export * from './queue-ordering';
 export * from './royalty';

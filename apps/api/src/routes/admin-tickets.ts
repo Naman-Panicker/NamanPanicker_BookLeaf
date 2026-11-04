@@ -12,12 +12,15 @@ import {
   isUnresolved,
   orderQueue,
   royaltySummary,
+  setCategoryRequestSchema,
+  setPriorityRequestSchema,
   setTicketStatusRequestSchema,
   ticketParamsSchema,
   ticketStatusSchema,
 } from '@bookleaf/shared';
 import type { z } from 'zod';
 import { currentAdminId, currentSession } from '../auth/sessions';
+import { type Classifier, overrideCategory, overridePriority, resetClassification } from '../classification';
 import type { Clock } from '../clock';
 import type { PrismaClient } from '../db';
 import type { Prisma } from '../generated/prisma/client';
@@ -30,6 +33,7 @@ type Deps = {
   routes: ReturnType<typeof createRoutes>;
   prisma: PrismaClient;
   clock: Clock;
+  classifier: Classifier;
 };
 
 const queueTicketSelect = {
@@ -39,6 +43,13 @@ const queueTicketSelect = {
   status: true,
   category: true,
   priority: true,
+  categorySource: true,
+  prioritySource: true,
+  priorityFloor: true,
+  suggestedCategory: true,
+  suggestedPriority: true,
+  classificationAttempts: true,
+  classificationError: true,
   latestAuthorMessageAt: true,
   createdAt: true,
   author: { select: { id: true, name: true } },
@@ -60,6 +71,13 @@ function toAdminQueueTicket(record: QueueTicketRecord): AdminQueueTicket {
     book: record.book,
     category: record.category,
     priority: record.priority,
+    categorySource: record.categorySource,
+    prioritySource: record.prioritySource,
+    priorityFloor: record.priorityFloor,
+    suggestedCategory: record.suggestedCategory,
+    suggestedPriority: record.suggestedPriority,
+    classificationAttempts: record.classificationAttempts,
+    classificationError: record.classificationError,
     assignee: record.assignee,
     awaitingAdmin: record.messages[0]?.authorId != null,
     waitingSince: record.latestAuthorMessageAt.toISOString(),
@@ -72,7 +90,12 @@ function statusFilter(status: z.output<typeof adminQueueQuerySchema>['status']):
   return status ?? { in: ticketStatusSchema.options.filter(isUnresolved) };
 }
 
-export function addAdminTicketRoutes({ routes, prisma, clock }: Deps) {
+export function addAdminTicketRoutes({ routes, prisma, clock, classifier }: Deps) {
+  const adminTicket = async (ticketId: string) => {
+    const record = await prisma.ticket.findUniqueOrThrow({ where: { id: ticketId }, select: queueTicketSelect });
+    return { ticket: toAdminQueueTicket(record) } satisfies AdminTicketResponse;
+  };
+
   routes.add(
     {
       method: 'get',
@@ -153,11 +176,71 @@ export function addAdminTicketRoutes({ routes, prisma, clock }: Deps) {
         type: 'SET_STATUS',
         status: body.status,
       });
-      const record = await prisma.ticket.findUniqueOrThrow({
-        where: { id: params.ticketId },
-        select: queueTicketSelect,
-      });
-      res.json({ ticket: toAdminQueueTicket(record) } satisfies AdminTicketResponse);
+      res.json(await adminTicket(params.ticketId));
+    },
+  );
+
+  routes.add(
+    {
+      method: 'put',
+      path: '/api/admin/tickets/:ticketId/category',
+      summary: "Set a Ticket's Category by hand, which the AI won't overwrite",
+      tag: 'Admin',
+      adminOnly: true,
+      params: ticketParamsSchema,
+      body: setCategoryRequestSchema,
+      responses: {
+        200: { description: 'The Ticket.', schema: adminTicketResponseSchema },
+        404: { description: 'The Ticket does not exist, or the caller is not an Admin.', schema: apiErrorSchema },
+        409: { description: 'The Ticket has just changed.', schema: apiErrorSchema },
+      },
+    },
+    async (_req, res, { params, body }) => {
+      await overrideCategory({ prisma, clock }, currentAdminId(res), params.ticketId, body.category);
+      res.json(await adminTicket(params.ticketId));
+    },
+  );
+
+  routes.add(
+    {
+      method: 'put',
+      path: '/api/admin/tickets/:ticketId/priority',
+      summary: "Set a Ticket's Priority by hand, which neither the AI nor a Priority Floor will overwrite",
+      tag: 'Admin',
+      adminOnly: true,
+      params: ticketParamsSchema,
+      body: setPriorityRequestSchema,
+      responses: {
+        200: { description: 'The Ticket.', schema: adminTicketResponseSchema },
+        404: { description: 'The Ticket does not exist, or the caller is not an Admin.', schema: apiErrorSchema },
+        409: { description: 'The Ticket has just changed.', schema: apiErrorSchema },
+      },
+    },
+    async (_req, res, { params, body }) => {
+      await overridePriority({ prisma, clock }, currentAdminId(res), params.ticketId, body.priority);
+      res.json(await adminTicket(params.ticketId));
+    },
+  );
+
+  routes.add(
+    {
+      method: 'post',
+      path: '/api/admin/tickets/:ticketId/classification-retry',
+      summary: 'Reset the attempts on an Unclassified Ticket and queue it for the AI again',
+      tag: 'Admin',
+      adminOnly: true,
+      params: ticketParamsSchema,
+      responses: {
+        202: { description: 'The Ticket, queued for the AI.', schema: adminTicketResponseSchema },
+        404: { description: 'The Ticket does not exist, or the caller is not an Admin.', schema: apiErrorSchema },
+        409: { description: 'The Ticket is already classified.', schema: apiErrorSchema },
+      },
+    },
+    async (_req, res, { params }) => {
+      await resetClassification(prisma, params.ticketId);
+      const response = await adminTicket(params.ticketId);
+      res.once('close', () => classifier.enqueue(params.ticketId));
+      res.status(202).json(response);
     },
   );
 }

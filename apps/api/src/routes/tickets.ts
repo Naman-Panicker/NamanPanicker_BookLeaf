@@ -17,6 +17,7 @@ import {
   ticketParamsSchema,
 } from '@bookleaf/shared';
 import { currentAuthorId, currentSession, type Session } from '../auth/sessions';
+import type { Classifier } from '../classification';
 import type { Clock } from '../clock';
 import type { PrismaClient } from '../db';
 import type { Prisma } from '../generated/prisma/client';
@@ -28,6 +29,7 @@ type Deps = {
   routes: ReturnType<typeof createRoutes>;
   prisma: PrismaClient;
   clock: Clock;
+  classifier: Classifier;
 };
 
 // Selecting only these columns keeps Admin-only fields from ever leaving the database on an Author's route.
@@ -109,7 +111,7 @@ async function listAdminEvents(prisma: PrismaClient, session: Session, ticketId:
   }));
 }
 
-export function addTicketRoutes({ routes, prisma, clock }: Deps) {
+export function addTicketRoutes({ routes, prisma, clock, classifier }: Deps) {
   routes.add(
     {
       method: 'get',
@@ -163,6 +165,8 @@ export function addTicketRoutes({ routes, prisma, clock }: Deps) {
         },
         select: authorTicketSelect,
       });
+      // Close also covers an Author who hung up early, whose Ticket exists all the same.
+      res.once('close', () => classifier.enqueue(record.id));
       res.status(201).json({ ticket: toAuthorTicket(record) } satisfies AuthorTicketResponse);
     },
   );

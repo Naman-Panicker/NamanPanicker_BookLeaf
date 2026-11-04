@@ -11,6 +11,8 @@ import {
   myTicketsResponseSchema,
   type SendMessageRequest,
   sessionResponseSchema,
+  type SetCategoryRequest,
+  type SetPriorityRequest,
   type SetTicketStatusRequest,
   type LoginRequest,
   ticketEventsResponseSchema,
@@ -177,6 +179,31 @@ export async function setTicketStatus(ticketId: string, request: SetTicketStatus
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
+  });
+  return adminTicketResponseSchema.parse(await res.json()).ticket;
+}
+
+export async function setTicketCategory(ticketId: string, request: SetCategoryRequest) {
+  const res = await authenticated(`/api/admin/tickets/${encodeURIComponent(ticketId)}/category`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return adminTicketResponseSchema.parse(await res.json()).ticket;
+}
+
+export async function setTicketPriority(ticketId: string, request: SetPriorityRequest) {
+  const res = await authenticated(`/api/admin/tickets/${encodeURIComponent(ticketId)}/priority`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return adminTicketResponseSchema.parse(await res.json()).ticket;
+}
+
+export async function retryClassification(ticketId: string) {
+  const res = await authenticated(`/api/admin/tickets/${encodeURIComponent(ticketId)}/classification-retry`, {
+    method: 'POST',
   });
   return adminTicketResponseSchema.parse(await res.json()).ticket;
 }

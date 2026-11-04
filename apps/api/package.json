@@ -13,6 +13,7 @@
     "db:seed": "prisma db seed"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.4.0",
     "@bookleaf/shared": "workspace:*",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",

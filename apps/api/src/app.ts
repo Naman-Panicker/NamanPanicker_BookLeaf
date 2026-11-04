@@ -7,7 +7,9 @@ import type {
 import { healthResponseSchema, SPIKE_HEARTBEAT_EVENT } from '@bookleaf/shared';
 import cookieParser from 'cookie-parser';
 import express from 'express';
+import type { AiClient } from './ai-client';
 import { createSessions } from './auth/sessions';
+import { createClassifier } from './classification';
 import type { Clock } from './clock';
 import type { PrismaClient } from './db';
 import type { EventPublisher } from './events';
@@ -25,14 +27,16 @@ export type AppOptions = {
   prisma: PrismaClient;
   clock: Clock;
   publisher: EventPublisher;
+  ai: AiClient;
 };
 
 const SPIKE_COOKIE = 'spike';
 // Vercel drops a proxied connection after 120s with no data (ADR-0003).
 const HEARTBEAT_MS = 25_000;
 
-export function createApp({ cookieSecure, sessionSecret, prisma, clock }: AppOptions) {
+export function createApp({ cookieSecure, sessionSecret, prisma, clock, ai }: AppOptions) {
   const app = express();
+  const classifier = createClassifier({ prisma, clock, ai });
 
   // Vercel caches rewritten responses unless told otherwise (ADR-0003).
   app.use((_req, res, next) => {
@@ -61,8 +65,8 @@ export function createApp({ cookieSecure, sessionSecret, prisma, clock }: AppOpt
 
   addSessionRoutes({ routes, prisma, sessions });
   addBookRoutes({ routes, prisma, clock });
-  addTicketRoutes({ routes, prisma, clock });
-  addAdminTicketRoutes({ routes, prisma, clock });
+  addTicketRoutes({ routes, prisma, clock, classifier });
+  addAdminTicketRoutes({ routes, prisma, clock, classifier });
 
   app.use(routes.router);
   app.use(createDocsRouter(routes.specs));
@@ -113,5 +117,5 @@ export function createApp({ cookieSecure, sessionSecret, prisma, clock }: AppOpt
 
   app.use(errorHandler);
 
-  return app;
+  return { app, classifier };
 }

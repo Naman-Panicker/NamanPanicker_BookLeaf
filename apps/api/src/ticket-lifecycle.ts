@@ -18,7 +18,7 @@ type StatusMove = { from: TicketStatus; to: TicketStatus };
 // A Ticket's status can only settle after a few moves, so this is plenty for people typing at once.
 const MESSAGE_ATTEMPTS = 3;
 
-const ticketJustChanged = () => conflict('This Ticket has just changed. Reload the page and try again.');
+export const ticketJustChanged = () => conflict('This Ticket has just changed. Reload the page and try again.');
 
 const REJECTIONS: Record<TransitionRejection, () => ApiError> = {
   TICKET_CLOSED: () => conflict("This Ticket is Closed, so it can't take new Messages."),

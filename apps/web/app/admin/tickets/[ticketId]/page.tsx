@@ -1,13 +1,20 @@
 'use client';
 
 import {
+  type AdminQueueTicket,
   type AdminWorkspaceResponse,
   type Book,
   CATEGORY_LABELS,
+  categorySchema,
+  type ClassificationSource,
   GENERAL_ACCOUNT_LEVEL_LABEL,
   isPublished,
+  isUnclassified,
+  MAX_CLASSIFICATION_ATTEMPTS,
   type Message,
   PAYOUT_THRESHOLD,
+  PRIORITY_LABELS,
+  prioritySchema,
   PRODUCTION_STAGE_LABELS,
   type RoyaltySummary,
   TICKET_STATUS_LABELS,
@@ -22,7 +29,7 @@ import { Figure } from '@/components/figure';
 import { MessageEditor } from '@/components/message-editor';
 import { TicketStatusBadge } from '@/components/ticket-status-badge';
 import { TicketThread } from '@/components/ticket-thread';
-import { PriorityBadge, UnclassifiedBadge } from '@/components/triage-badges';
+import { CategoryTriage, PriorityTriage } from '@/components/triage-badges';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -33,6 +40,9 @@ import {
   getAdminWorkspace,
   getTicketEvents,
   getTicketMessages,
+  retryClassification,
+  setTicketCategory,
+  setTicketPriority,
   setTicketStatus,
 } from '@/lib/api';
 import { formatCount, formatDate, formatDay, formatRupees } from '@/lib/format';
@@ -88,8 +98,9 @@ export default function AdminTicketPage() {
         <h1 className="text-xl font-semibold break-words">{ticket.subject}</h1>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <TicketStatusBadge status={ticket.status} />
-          {ticket.priority ? <PriorityBadge priority={ticket.priority} /> : <UnclassifiedBadge />}
-          {ticket.category && <span>{CATEGORY_LABELS[ticket.category]}</span>}
+          <PriorityTriage ticket={ticket} />
+          {/* While both are missing, one Unclassified badge says it all. */}
+          {(ticket.category || ticket.priority) && <CategoryTriage ticket={ticket} />}
           <span className="text-muted-foreground">{ticket.assignee?.name ?? 'Unassigned'}</span>
         </div>
       </div>
@@ -110,12 +121,35 @@ export default function AdminTicketPage() {
         </div>
         <aside className="flex flex-col gap-6">
           <StatusControls ticketId={ticket.id} status={ticket.status} onChanged={reload} />
+          <TriageControls ticket={ticket} onChanged={reload} />
           <BookCard book={book} />
           <RoyaltyCard royalty={royalty} />
         </aside>
       </div>
     </div>
   );
+}
+
+// For the sidebar's controls: runs a change, then reloads the workspace to show it.
+function useTicketChange(onChanged: () => void) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(change: () => Promise<unknown>) {
+    setError(null);
+    setSaving(true);
+    try {
+      await change();
+      onChanged();
+    } catch (failure) {
+      setError(actionErrorMessage(failure));
+      if (failure instanceof ApiRequestError && failure.code === 'CONFLICT') onChanged();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return { saving, error, run };
 }
 
 function StatusControls({
@@ -127,22 +161,8 @@ function StatusControls({
   status: TicketStatus;
   onChanged: () => void;
 }) {
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function change(next: TicketStatus) {
-    setError(null);
-    setSaving(true);
-    try {
-      await setTicketStatus(ticketId, { status: next });
-      onChanged();
-    } catch (failure) {
-      setError(actionErrorMessage(failure));
-      if (failure instanceof ApiRequestError && failure.code === 'CONFLICT') onChanged();
-    } finally {
-      setSaving(false);
-    }
-  }
+  const { saving, error, run } = useTicketChange(onChanged);
+  const change = (next: TicketStatus) => run(() => setTicketStatus(ticketId, { status: next }));
 
   return (
     <Card>
@@ -187,6 +207,121 @@ function StatusControls({
         )}
       </CardContent>
     </Card>
+  );
+}
+
+function TriageControls({ ticket, onChanged }: { ticket: AdminQueueTicket; onChanged: () => void }) {
+  const { saving, error, run } = useTicketChange(onChanged);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Triage</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {isUnclassified(ticket) && (
+          <div className="flex flex-col items-start gap-2 rounded-md bg-amber-50 p-3 text-sm dark:bg-amber-950/30">
+            <UnclassifiedNotice ticket={ticket} />
+            <Button size="sm" variant="outline" disabled={saving} onClick={() => run(() => retryClassification(ticket.id))}>
+              Retry AI
+            </Button>
+          </div>
+        )}
+        <TriageField
+          id="ticket-category"
+          label="Category"
+          value={ticket.category}
+          options={categorySchema.options}
+          labels={CATEGORY_LABELS}
+          source={ticket.categorySource}
+          suggested={ticket.suggestedCategory}
+          disabled={saving}
+          onChange={(value) => run(() => setTicketCategory(ticket.id, { category: categorySchema.parse(value) }))}
+        />
+        <TriageField
+          id="ticket-priority"
+          label="Priority"
+          value={ticket.priority}
+          options={prioritySchema.options}
+          labels={PRIORITY_LABELS}
+          source={ticket.prioritySource}
+          suggested={ticket.suggestedPriority}
+          disabled={saving}
+          onChange={(value) => run(() => setTicketPriority(ticket.id, { priority: prioritySchema.parse(value) }))}
+        />
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function UnclassifiedNotice({ ticket }: { ticket: AdminQueueTicket }) {
+  if (ticket.classificationAttempts < MAX_CLASSIFICATION_ATTEMPTS) {
+    return <p>The AI hasn&apos;t classified this Ticket yet. Reload to see its result, or classify it by hand.</p>;
+  }
+  return (
+    <>
+      <p>The AI couldn&apos;t classify this Ticket, so it needs classifying by hand or another try.</p>
+      {ticket.classificationError && (
+        <p className="text-xs break-words text-muted-foreground">Last error: {ticket.classificationError}</p>
+      )}
+    </>
+  );
+}
+
+function TriageField<T extends string>({
+  id,
+  label,
+  value,
+  options,
+  labels,
+  source,
+  suggested,
+  disabled,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: T | null;
+  options: readonly T[];
+  labels: Record<T, string>;
+  source: ClassificationSource | null;
+  suggested: T | null;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Label htmlFor={id} className="text-xs text-muted-foreground">
+        {label}
+      </Label>
+      <NativeSelect
+        id={id}
+        className="w-full"
+        value={value ?? ''}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        {/* Only a Ticket with no value yet needs this, and choosing it means nothing, so it can't be chosen. */}
+        {value === null && (
+          <NativeSelectOption value="" disabled>
+            Choose…
+          </NativeSelectOption>
+        )}
+        {options.map((option) => (
+          <NativeSelectOption key={option} value={option}>
+            {labels[option]}
+          </NativeSelectOption>
+        ))}
+      </NativeSelect>
+      {source === 'ADMIN' && suggested && suggested !== value && (
+        <p className="text-xs text-muted-foreground">The AI suggested {labels[suggested]}.</p>
+      )}
+    </div>
   );
 }
 

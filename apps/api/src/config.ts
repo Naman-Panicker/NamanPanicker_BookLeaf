@@ -1,10 +1,15 @@
 import { z } from 'zod';
 
+const DEFAULT_AI_MODEL = 'claude-haiku-5-5';
+
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   SESSION_SECRET: z.string().min(32),
   PORT: z.coerce.number().int().default(4000),
   NODE_ENV: z.string().optional(),
+  // Optional, because Tickets still work without the AI. They just stay Unclassified.
+  ANTHROPIC_API_KEY: z.string().optional(),
+  AI_MODEL: z.string().optional(),
 });
 
 export function loadConfig(env: NodeJS.ProcessEnv) {
@@ -14,11 +19,14 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
     const problems = result.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`);
     throw new Error(`Invalid environment. See apps/api/.env.example.\n${problems.join('\n')}`);
   }
-  const { DATABASE_URL, SESSION_SECRET, PORT, NODE_ENV } = result.data;
+  const { DATABASE_URL, SESSION_SECRET, PORT, NODE_ENV, ANTHROPIC_API_KEY, AI_MODEL } = result.data;
   return {
     databaseUrl: DATABASE_URL,
     sessionSecret: SESSION_SECRET,
     port: PORT,
     cookieSecure: NODE_ENV === 'production',
+    // A line left blank in .env counts as not set.
+    anthropicApiKey: ANTHROPIC_API_KEY || null,
+    aiModel: AI_MODEL || DEFAULT_AI_MODEL,
   };
 }

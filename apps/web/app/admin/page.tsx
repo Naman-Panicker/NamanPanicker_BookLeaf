@@ -18,7 +18,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { type ReactNode, Suspense, useEffect, useState } from 'react';
 import { TicketStatusBadge } from '@/components/ticket-status-badge';
-import { PriorityBadge, UnclassifiedBadge } from '@/components/triage-badges';
+import { CategoryTriage, PriorityTriage } from '@/components/triage-badges';
 import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -262,9 +262,11 @@ function QueueRow({ ticket, loadedAt }: { ticket: AdminQueueTicket; loadedAt: Da
         <WaitingCell ticket={ticket} loadedAt={loadedAt} />
       </TableCell>
       <TableCell className="whitespace-normal">
-        {ticket.category ? CATEGORY_LABELS[ticket.category] : <UnclassifiedBadge />}
+        <CategoryTriage ticket={ticket} />
       </TableCell>
-      <TableCell>{ticket.priority ? <PriorityBadge priority={ticket.priority} /> : <UnclassifiedBadge />}</TableCell>
+      <TableCell className="whitespace-normal">
+        <PriorityTriage ticket={ticket} />
+      </TableCell>
       <TableCell>
         <TicketStatusBadge status={ticket.status} />
       </TableCell>

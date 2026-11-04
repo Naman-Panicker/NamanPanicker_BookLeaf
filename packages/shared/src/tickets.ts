@@ -42,6 +42,24 @@ export const PRIORITY_LABELS: Record<Priority, string> = {
   LOW: 'Low',
 };
 
+export const classificationSourceSchema = z.enum(['AI', 'ADMIN']);
+export type ClassificationSource = z.infer<typeof classificationSourceSchema>;
+
+export const CLASSIFICATION_SOURCE_LABELS: Record<ClassificationSource, string> = {
+  AI: 'AI',
+  ADMIN: 'Admin',
+};
+
+export const priorityFloorSchema = z.enum(['ISBN_METADATA', 'OVERDUE_ROYALTY']);
+export type PriorityFloor = z.infer<typeof priorityFloorSchema>;
+
+export const PRIORITY_FLOOR_LABELS: Record<PriorityFloor, string> = {
+  ISBN_METADATA: 'ISBN policy',
+  OVERDUE_ROYALTY: 'Overdue royalty policy',
+};
+
+export const MAX_CLASSIFICATION_ATTEMPTS = 3;
+
 export const GENERAL_ACCOUNT_LEVEL_LABEL = 'General / Account Level';
 
 export const SUBJECT_MAX_LENGTH = 200;
@@ -111,6 +129,15 @@ export const adminQueueTicketSchema = z.object({
   book: z.object({ id: z.string(), title: z.string() }).nullable(),
   category: categorySchema.nullable(),
   priority: prioritySchema.nullable(),
+  categorySource: classificationSourceSchema.nullable(),
+  prioritySource: classificationSourceSchema.nullable(),
+  // The Floor that raised the current Priority, if one did.
+  priorityFloor: priorityFloorSchema.nullable(),
+  // What the AI said, kept whatever an Admin or a Floor has since made of it.
+  suggestedCategory: categorySchema.nullable(),
+  suggestedPriority: prioritySchema.nullable(),
+  classificationAttempts: z.number().int(),
+  classificationError: z.string().nullable(),
   assignee: z.object({ id: z.string(), name: z.string() }).nullable(),
   awaitingAdmin: z.boolean(),
   // When the Author's latest Message arrived.
@@ -184,6 +211,16 @@ export const setTicketStatusRequestSchema = z.object({
   status: ticketStatusSchema,
 });
 export type SetTicketStatusRequest = z.infer<typeof setTicketStatusRequestSchema>;
+
+export const setCategoryRequestSchema = z.object({
+  category: categorySchema,
+});
+export type SetCategoryRequest = z.infer<typeof setCategoryRequestSchema>;
+
+export const setPriorityRequestSchema = z.object({
+  priority: prioritySchema,
+});
+export type SetPriorityRequest = z.infer<typeof setPriorityRequestSchema>;
 
 export const adminTicketResponseSchema = z.object({ ticket: adminQueueTicketSchema });
 export type AdminTicketResponse = z.infer<typeof adminTicketResponseSchema>;

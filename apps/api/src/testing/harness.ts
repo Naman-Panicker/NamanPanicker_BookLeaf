@@ -1,5 +1,6 @@
 import bcrypt from 'bcryptjs';
 import request from 'supertest';
+import type { AiClient, AiPrompt } from '../ai-client';
 import { createApp } from '../app';
 import type { Clock } from '../clock';
 import { createPrisma } from '../db';
@@ -16,10 +17,17 @@ const passwordHash = bcrypt.hashSync(PASSWORD, 4);
 export const SESSION_SECRET = 'test-session-secret-that-is-long-enough';
 const START_TIME = new Date('2026-01-15T10:00:00.000Z');
 
+// Waiting takes no time, and each wait is noted so a test can check it.
 export function fakeClock() {
   let now = START_TIME;
+  const sleeps: number[] = [];
   return {
     now: () => now,
+    sleeps,
+    sleep(ms: number) {
+      sleeps.push(ms);
+      return Promise.resolve();
+    },
     advanceDays(days: number) {
       now = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
     },
@@ -33,16 +41,61 @@ export function recordingPublisher() {
   };
 }
 
+// Gives each answer in turn, then keeps repeating the last. An Error makes that attempt fail.
+export function fakeAi(...answers: unknown[]) {
+  const prompts: AiPrompt[] = [];
+  return {
+    prompts,
+    async classify(prompt: AiPrompt) {
+      prompts.push(prompt);
+      const answer = answers[Math.min(prompts.length, answers.length) - 1];
+      if (answer instanceof Error) throw answer;
+      return answer;
+    },
+  } satisfies AiClient & Record<string, unknown>;
+}
+
+// Doesn't answer until the test says so, to play out what happens while the AI is thinking.
+export function heldAi(answer: unknown) {
+  let release = () => {};
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let noteAsked = () => {};
+  const asked = new Promise<void>((resolve) => {
+    noteAsked = resolve;
+  });
+  return {
+    asked,
+    release: () => release(),
+    async classify() {
+      noteAsked();
+      await released;
+      return answer;
+    },
+  } satisfies AiClient & Record<string, unknown>;
+}
+
+// The default, so tests about something else never have background work writing to the database.
+const silentAi: AiClient = { classify: () => new Promise(() => {}) };
+
+type AppOverrides = Partial<Parameters<typeof createApp>[0]>;
+
 // supertest talks plain http, and its cookie jar won't send a Secure cookie back over it.
-export function makeTestApp(overrides: Partial<Parameters<typeof createApp>[0]> = {}) {
+export function makeTestServer(overrides: AppOverrides = {}) {
   return createApp({
     cookieSecure: false,
     sessionSecret: SESSION_SECRET,
     prisma,
     clock: fakeClock(),
     publisher: recordingPublisher(),
+    ai: silentAi,
     ...overrides,
   });
+}
+
+export function makeTestApp(overrides: AppOverrides = {}) {
+  return makeTestServer(overrides).app;
 }
 
 // Tests sign in through this, so only this helper knows how a session travels with a request.
