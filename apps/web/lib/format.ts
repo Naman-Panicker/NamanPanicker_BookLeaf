@@ -18,6 +18,12 @@ export function formatDateTime(moment: string) {
   return dateTime.format(new Date(moment));
 }
 
+const day = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' });
+
+export function formatDay(moment: string) {
+  return day.format(new Date(moment));
+}
+
 export function formatRupees(amount: number | null) {
   return amount === null ? NOT_APPLICABLE : rupees.format(amount);
 }

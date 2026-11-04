@@ -1,8 +1,9 @@
+import type { AdminQueueTicket } from '@bookleaf/shared';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import sampleData from '../prisma/sample-data.json';
 import { DEMO_PASSWORD, seed } from './seed';
-import { makeTestApp, prisma, resetDatabase } from './testing/harness';
+import { makeTestApp, prisma, resetDatabase, signedInAgent } from './testing/harness';
 
 beforeEach(resetDatabase);
 
@@ -98,6 +99,82 @@ describe('seeding', () => {
     expect(await stageOf('BK001')).toBe('PUBLISHED_LIVE');
     expect(await stageOf('BK013')).toBe('COVER_DESIGN');
     expect(await stageOf('BK015')).toBe('TYPESETTING');
+  });
+
+  describe('Tickets', () => {
+    const NOW = new Date('2026-03-10T12:00:00.000Z');
+
+    async function adminQueue(query: Record<string, string> = {}) {
+      const { admins } = await seed(prisma, NOW);
+      const agent = await signedInAgent(makeTestApp(), admins[0] as string, DEMO_PASSWORD);
+      return (await agent.get('/api/admin/tickets').query(query)).body.tickets as AdminQueueTicket[];
+    }
+
+    it('fills the queue across different Authors and mixed Ticket Statuses, without AI', async () => {
+      const tickets = await adminQueue({ status: 'ALL' });
+
+      expect(tickets).toHaveLength(6);
+      expect(new Set(tickets.map(({ author }) => author.id)).size).toBe(6);
+      expect(new Set(tickets.map(({ status }) => status))).toEqual(
+        new Set(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']),
+      );
+
+      const rows = await prisma.ticket.findMany();
+      for (const row of rows) {
+        expect(row).toMatchObject({
+          category: expect.any(String),
+          priority: expect.any(String),
+          categorySource: expect.any(String),
+          prioritySource: expect.any(String),
+        });
+      }
+    });
+
+    it('shows live work on the first visit, with some of it Awaiting Admin', async () => {
+      const tickets = await adminQueue();
+
+      expect(tickets.length).toBeGreaterThanOrEqual(3);
+      expect(tickets.some(({ awaitingAdmin }) => awaitingAdmin)).toBe(true);
+      expect(tickets.some(({ awaitingAdmin }) => !awaitingAdmin)).toBe(true);
+      expect(tickets[0]?.priority).toBe('CRITICAL');
+    });
+
+    it('includes a back-and-forth thread, whose wait runs from the latest Author Message', async () => {
+      await seed(prisma, NOW);
+
+      const tickets = await prisma.ticket.findMany({
+        include: { messages: { orderBy: { createdAt: 'asc' } } },
+      });
+
+      const backAndForth = tickets.find(({ messages }) => {
+        const senders = messages.map(({ authorId }) => (authorId ? 'AUTHOR' : 'ADMIN'));
+        return senders.join() === 'AUTHOR,ADMIN,AUTHOR';
+      });
+      expect(backAndForth).toBeDefined();
+      expect(backAndForth?.latestAuthorMessageAt).toEqual(backAndForth?.messages[2]?.createdAt);
+      expect(backAndForth?.lastUpdateAt).toEqual(backAndForth?.messages[2]?.createdAt);
+    });
+
+    it('stays out of the way of Tickets raised through the portal', async () => {
+      await seed(prisma, NOW);
+
+      const rows = await prisma.ticket.findMany();
+
+      for (const { referenceNumber } of rows) expect(referenceNumber).toBeLessThan(1001);
+    });
+
+    it("can run again without duplicating Tickets or undoing an Admin's work", async () => {
+      await seed(prisma, NOW);
+      const before = await prisma.ticket.findFirstOrThrow({ where: { status: 'OPEN' } });
+      await prisma.ticket.update({ where: { id: before.id }, data: { status: 'CLOSED' } });
+
+      await seed(prisma, new Date('2026-03-20T12:00:00.000Z'));
+
+      expect(await prisma.ticket.count()).toBe(6);
+      expect(await prisma.message.count({ where: { ticketId: before.id } })).toBe(1);
+      const after = await prisma.ticket.findUniqueOrThrow({ where: { id: before.id } });
+      expect(after).toMatchObject({ status: 'CLOSED', latestAuthorMessageAt: before.latestAuthorMessageAt });
+    });
   });
 
   it('keeps the same Books and IDs when it runs again', async () => {

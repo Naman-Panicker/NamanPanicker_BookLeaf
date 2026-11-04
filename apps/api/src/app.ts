@@ -14,6 +14,7 @@ import type { EventPublisher } from './events';
 import { createDocsRouter } from './http/docs';
 import { errorHandler, notFound } from './http/errors';
 import { createRoutes } from './http/routes';
+import { addAdminTicketRoutes } from './routes/admin-tickets';
 import { addBookRoutes } from './routes/books';
 import { addSessionRoutes } from './routes/session';
 import { addTicketRoutes } from './routes/tickets';
@@ -61,6 +62,7 @@ export function createApp({ cookieSecure, sessionSecret, prisma, clock }: AppOpt
   addSessionRoutes({ routes, prisma, sessions });
   addBookRoutes({ routes, prisma, clock });
   addTicketRoutes({ routes, prisma, clock });
+  addAdminTicketRoutes({ routes, prisma });
 
   app.use(routes.router);
   app.use(createDocsRouter(routes.specs));

@@ -11,6 +11,35 @@ export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
   CLOSED: 'Closed',
 };
 
+export const categorySchema = z.enum([
+  'ROYALTY_PAYMENTS',
+  'ISBN_METADATA',
+  'PRINTING_QUALITY',
+  'DISTRIBUTION_AVAILABILITY',
+  'BOOK_STATUS_PRODUCTION',
+  'GENERAL_INQUIRY',
+]);
+export type Category = z.infer<typeof categorySchema>;
+
+export const CATEGORY_LABELS: Record<Category, string> = {
+  ROYALTY_PAYMENTS: 'Royalty & Payments',
+  ISBN_METADATA: 'ISBN & Metadata Issues',
+  PRINTING_QUALITY: 'Printing & Quality',
+  DISTRIBUTION_AVAILABILITY: 'Distribution & Availability',
+  BOOK_STATUS_PRODUCTION: 'Book Status & Production Updates',
+  GENERAL_INQUIRY: 'General Inquiry',
+};
+
+export const prioritySchema = z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW']);
+export type Priority = z.infer<typeof prioritySchema>;
+
+export const PRIORITY_LABELS: Record<Priority, string> = {
+  CRITICAL: 'Critical',
+  HIGH: 'High',
+  MEDIUM: 'Medium',
+  LOW: 'Low',
+};
+
 export const GENERAL_ACCOUNT_LEVEL_LABEL = 'General / Account Level';
 
 export const SUBJECT_MAX_LENGTH = 200;
@@ -52,6 +81,42 @@ export type AuthorTicketResponse = z.infer<typeof authorTicketResponseSchema>;
 
 export const myTicketsResponseSchema = z.object({ tickets: z.array(authorTicketSchema) });
 export type MyTicketsResponse = z.infer<typeof myTicketsResponseSchema>;
+
+export const ALL_STATUSES = 'ALL';
+
+export const adminQueueQuerySchema = z.object({
+  // Left out, the queue shows only Tickets that aren't Resolved or Closed.
+  status: z.enum([...ticketStatusSchema.options, ALL_STATUSES]).optional(),
+  category: categorySchema.optional(),
+  priority: prioritySchema.optional(),
+  // When the Ticket was raised. The caller's day boundaries depend on their time zone, so these are moments.
+  createdFrom: z.iso.datetime().optional(),
+  createdBefore: z.iso.datetime().optional(),
+  assignedToMe: z.stringbool().optional(),
+});
+export type AdminQueueQuery = z.input<typeof adminQueueQuerySchema>;
+
+// A row of the Admin queue. A null Category or Priority means the Ticket is Unclassified.
+export const adminQueueTicketSchema = z.object({
+  id: z.string(),
+  reference: z.string(),
+  subject: z.string(),
+  status: ticketStatusSchema,
+  author: z.object({ id: z.string(), name: z.string() }),
+  // Null means General / Account Level.
+  book: z.object({ id: z.string(), title: z.string() }).nullable(),
+  category: categorySchema.nullable(),
+  priority: prioritySchema.nullable(),
+  assignee: z.object({ id: z.string(), name: z.string() }).nullable(),
+  awaitingAdmin: z.boolean(),
+  // When the Author's latest Message arrived.
+  waitingSince: z.iso.datetime(),
+  createdAt: z.iso.datetime(),
+});
+export type AdminQueueTicket = z.infer<typeof adminQueueTicketSchema>;
+
+export const adminQueueResponseSchema = z.object({ tickets: z.array(adminQueueTicketSchema) });
+export type AdminQueueResponse = z.infer<typeof adminQueueResponseSchema>;
 
 export const ticketParamsSchema = z.object({ ticketId: z.string() });
 

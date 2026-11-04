@@ -1,5 +1,6 @@
 import express, { type Request, type RequestHandler, type Response, Router } from 'express';
 import type { z } from 'zod';
+import { requireAdmin } from '../auth/sessions';
 import { validationFailed } from './errors';
 
 type Schema = z.ZodType;
@@ -12,6 +13,7 @@ export type RouteSpec<B = Schema | undefined, Q = Schema | undefined, P = Schema
   tag: string;
   // Routes need a session unless they say otherwise.
   public?: boolean;
+  adminOnly?: boolean;
   body?: B;
   query?: Q;
   params?: P;
@@ -39,6 +41,8 @@ export function createRoutes(requireSession: RequestHandler) {
     const middleware: RequestHandler[] = [];
     // Authenticating first means a logged-out request gets 401 whatever its body looks like.
     if (!spec.public) middleware.push(requireSession);
+    // Ahead of validation, so a bad request from an Author can't reveal that an Admin route exists.
+    if (spec.adminOnly) middleware.push(requireAdmin);
     // Only JSON is parsed, so a form post has no body and fails validation (ADR-0003).
     if (spec.body) middleware.push(express.json());
 

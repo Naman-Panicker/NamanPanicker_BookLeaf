@@ -83,15 +83,17 @@ describe('raising a Ticket', () => {
     expect(number(second.body.ticket.reference)).toBe(number(first.body.ticket.reference) + 1);
   });
 
-  // No Admin route exposes classification until ticket 05, so this has to read the row.
   it('leaves a new Ticket Unclassified', async () => {
     await createKavita();
-    const agent = await signedInAgent(makeTestApp(), 'kavita@example.com');
+    await createAdmin({ email: 'asha@example.com' });
+    const app = makeTestApp();
+    const agent = await signedInAgent(app, 'kavita@example.com');
+    const adminAgent = await signedInAgent(app, 'asha@example.com');
 
     const res = await agent.post('/api/tickets').send(VALID_TICKET);
 
-    const ticket = await prisma.ticket.findUniqueOrThrow({ where: { id: res.body.ticket.id } });
-    expect(ticket).toMatchObject({ category: null, priority: null });
+    const queue = await adminAgent.get('/api/admin/tickets');
+    expect(queue.body.tickets).toMatchObject([{ id: res.body.ticket.id, category: null, priority: null }]);
   });
 
   it('names each bad field when subject and description are empty', async () => {
@@ -212,7 +214,7 @@ describe('listing My Tickets', () => {
     expect(res.status).toBe(401);
   });
 
-  it('returns 404 to an Admin for now', async () => {
+  it('returns 404 to an Admin, who works the queue at /api/admin/tickets instead', async () => {
     await createAdmin({ email: 'asha@example.com' });
     const agent = await signedInAgent(makeTestApp(), 'asha@example.com');
 

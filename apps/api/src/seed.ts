@@ -3,13 +3,14 @@ import { z } from 'zod';
 import sampleData from '../prisma/sample-data.json';
 import { hashPassword } from './auth/passwords';
 import type { PrismaClient } from './db';
+import { ASHA_EMAIL, DEV_EMAIL, seedTickets } from './seed-tickets';
 
 // Not a secret: it's the login reviewers use for the demo accounts.
 export const DEMO_PASSWORD = 'BookLeaf-demo-2026';
 
 const ADMINS = [
-  { name: 'Asha Rao', email: 'asha.rao@bookleaf.example' },
-  { name: 'Dev Menon', email: 'dev.menon@bookleaf.example' },
+  { name: 'Asha Rao', email: ASHA_EMAIL },
+  { name: 'Dev Menon', email: DEV_EMAIL },
 ];
 
 const sampleDataSchema = z.object({
@@ -56,7 +57,7 @@ function toDate(date: string | null) {
   return date === null ? null : new Date(date);
 }
 
-export async function seed(prisma: PrismaClient) {
+export async function seed(prisma: PrismaClient, now = new Date()) {
   const passwordHash = await hashPassword(DEMO_PASSWORD);
   const { authors } = sampleDataSchema.parse(sampleData);
 
@@ -114,9 +115,12 @@ export async function seed(prisma: PrismaClient) {
     });
   }
 
+  const tickets = await seedTickets(prisma, now);
+
   return {
     authors: authors.map(({ email }) => email),
     admins: ADMINS.map(({ email }) => email),
     books: authors.flatMap(({ books }) => books.map(({ book_id }) => book_id)),
+    tickets,
   };
 }

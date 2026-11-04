@@ -73,3 +73,15 @@ export function currentAuthorId(res: Response) {
   if (role !== 'AUTHOR') throw notFound();
   return id;
 }
+
+// To anyone but an Admin, Admin routes don't exist.
+export function currentAdminId(res: Response) {
+  const { id, role } = currentSession(res);
+  if (role !== 'ADMIN') throw notFound();
+  return id;
+}
+
+export const requireAdmin: RequestHandler = (_req, res, next) => {
+  currentAdminId(res);
+  next();
+};

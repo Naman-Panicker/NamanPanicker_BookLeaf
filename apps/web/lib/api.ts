@@ -1,4 +1,6 @@
 import {
+  type AdminQueueQuery,
+  adminQueueResponseSchema,
   apiErrorSchema,
   authorTicketResponseSchema,
   type CreateTicketRequest,
@@ -125,4 +127,10 @@ export async function getTicket(ticketId: string) {
 export async function getTicketMessages(ticketId: string) {
   const res = await authenticated(`/api/tickets/${encodeURIComponent(ticketId)}/messages`);
   return ticketMessagesResponseSchema.parse(await res.json()).messages;
+}
+
+export async function getAdminQueue(query: AdminQueueQuery) {
+  const entries = Object.entries(query).filter(([, value]) => value !== undefined);
+  const res = await authenticated(`/api/admin/tickets?${new URLSearchParams(entries).toString()}`);
+  return adminQueueResponseSchema.parse(await res.json()).tickets;
 }

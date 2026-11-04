@@ -6,8 +6,10 @@ if (!url) throw new Error('Set DATABASE_URL in apps/api/.env before seeding.');
 
 const prisma = createPrisma(url);
 try {
-  const { authors, admins, books } = await seed(prisma);
-  console.log(`Seeded ${authors.length} Authors, ${books.length} Books and ${admins.length} Admins.`);
+  const { authors, admins, books, tickets } = await seed(prisma);
+  console.log(
+    `Seeded ${authors.length} Authors, ${books.length} Books, ${admins.length} Admins and ${tickets.length} Tickets.`,
+  );
 } finally {
   await prisma.$disconnect();
 }

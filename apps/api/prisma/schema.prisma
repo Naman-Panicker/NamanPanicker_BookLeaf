@@ -72,13 +72,14 @@ model Author {
 }
 
 model Admin {
-  id           String    @id @default(uuid())
-  name         String
-  email        String    @unique
-  passwordHash String    @map("password_hash")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  messages     Message[]
+  id              String    @id @default(uuid())
+  name            String
+  email           String    @unique
+  passwordHash    String    @map("password_hash")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  messages        Message[]
+  assignedTickets Ticket[]
 
   @@map("admins")
 }
@@ -123,6 +124,8 @@ model Ticket {
   book                   Book?                 @relation(fields: [bookId], references: [id], onDelete: Restrict)
   subject                String
   status                 TicketStatus          @default(OPEN)
+  assigneeId             String?               @map("assignee_id")
+  assignee               Admin?                @relation(fields: [assigneeId], references: [id], onDelete: Restrict)
   // The AI's suggestions are kept apart from the current values, which an Admin can override.
   suggestedCategory      Category?             @map("suggested_category")
   suggestedPriority      Priority?             @map("suggested_priority")
@@ -143,6 +146,7 @@ model Ticket {
 
   @@index([authorId])
   @@index([bookId])
+  @@index([assigneeId])
   @@map("tickets")
 }
 

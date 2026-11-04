@@ -4,6 +4,8 @@ const LOCAL_API_BASE_URL = 'http://localhost:4000';
 
 const nextConfig: NextConfig = {
   transpilePackages: ['@bookleaf/shared'],
+  // Stops `next dev` writing its own AGENTS.md into this folder.
+  agentRules: false,
   // The browser talks only to this origin. /api/* is proxied to Express (ADR-0003).
   // Rewrites are fixed at build time, so on Vercel API_BASE_URL must be set before building.
   async rewrites() {

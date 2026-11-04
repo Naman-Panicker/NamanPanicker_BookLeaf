@@ -46,9 +46,9 @@ export function makeTestApp(overrides: Partial<Parameters<typeof createApp>[0]> 
 }
 
 // Tests sign in through this, so only this helper knows how a session travels with a request.
-export async function signedInAgent(app: ReturnType<typeof makeTestApp>, email: string) {
+export async function signedInAgent(app: ReturnType<typeof makeTestApp>, email: string, password = PASSWORD) {
   const agent = request.agent(app);
-  const res = await agent.post('/api/session').send({ email, password: PASSWORD });
+  const res = await agent.post('/api/session').send({ email, password });
   if (res.status !== 200) throw new Error(`Could not sign in ${email}: got ${res.status}`);
   return agent;
 }
@@ -91,6 +91,24 @@ export function createBook(authorId: string, overrides: BookFixture = {}) {
 export function createAdmin(overrides: { email?: string; name?: string } = {}) {
   return prisma.admin.create({
     data: { name: 'Test Admin', email: 'admin@example.com', passwordHash, ...overrides },
+  });
+}
+
+type TicketFixture = Partial<Prisma.TicketUncheckedCreateInput>;
+
+// Starts the thread with the Author's description, as raising a Ticket does.
+export function createTicket(authorId: string, overrides: TicketFixture = {}) {
+  const raisedAt = overrides.createdAt ?? START_TIME;
+  return prisma.ticket.create({
+    data: {
+      authorId,
+      subject: 'Test Ticket',
+      latestAuthorMessageAt: raisedAt,
+      lastUpdateAt: raisedAt,
+      createdAt: raisedAt,
+      messages: { create: { authorId, body: 'Test description', createdAt: raisedAt } },
+      ...overrides,
+    },
   });
 }
 
