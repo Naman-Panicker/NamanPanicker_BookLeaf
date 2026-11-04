@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { bookSchema } from './books';
+import { royaltySummarySchema } from './royalty';
 import { roleSchema } from './session';
 
 export const ticketStatusSchema = z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']);
@@ -44,6 +46,8 @@ export const GENERAL_ACCOUNT_LEVEL_LABEL = 'General / Account Level';
 
 export const SUBJECT_MAX_LENGTH = 200;
 export const DESCRIPTION_MAX_LENGTH = 5000;
+// The description is a Ticket's first Message, so the two share a limit.
+export const MESSAGE_MAX_LENGTH = DESCRIPTION_MAX_LENGTH;
 
 export const createTicketRequestSchema = z.object({
   // Null means General / Account Level. It has to be chosen, so leaving it out is an error.
@@ -131,3 +135,63 @@ export type Message = z.infer<typeof messageSchema>;
 
 export const ticketMessagesResponseSchema = z.object({ messages: z.array(messageSchema) });
 export type TicketMessagesResponse = z.infer<typeof ticketMessagesResponseSchema>;
+
+export const sendMessageRequestSchema = z.object({
+  body: z
+    .string({ error: 'Write a Message.' })
+    .trim()
+    .min(1, { error: 'Write a Message.' })
+    .max(MESSAGE_MAX_LENGTH, { error: `Keep the Message to ${MESSAGE_MAX_LENGTH} characters or fewer.` }),
+});
+export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
+
+export const messageResponseSchema = z.object({ message: messageSchema });
+export type MessageResponse = z.infer<typeof messageResponseSchema>;
+
+export const ticketEventKindSchema = z.enum([
+  'STATUS_CHANGED',
+  'ASSIGNED',
+  'UNASSIGNED',
+  'TAKEOVER_REQUESTED',
+  'TAKEOVER_ACCEPTED',
+  'TAKEOVER_DECLINED',
+  'TAKEOVER_CANCELLED',
+  'TAKEOVER_FORCED',
+  'CATEGORY_OVERRIDDEN',
+  'PRIORITY_OVERRIDDEN',
+]);
+export type TicketEventKind = z.infer<typeof ticketEventKindSchema>;
+
+export const ticketEventSchema = z.object({
+  id: z.string(),
+  kind: ticketEventKindSchema,
+  // Which side made the change, as on a Message.
+  actor: roleSchema,
+  // Sent to Admins only, so Authors hear from BookLeaf and not from a named Admin.
+  actorName: z.string().optional(),
+  before: z.string().nullable(),
+  after: z.string().nullable(),
+  // Sent to Admins only.
+  reason: z.string().nullable().optional(),
+  createdAt: z.iso.datetime(),
+});
+export type TicketEvent = z.infer<typeof ticketEventSchema>;
+
+export const ticketEventsResponseSchema = z.object({ events: z.array(ticketEventSchema) });
+export type TicketEventsResponse = z.infer<typeof ticketEventsResponseSchema>;
+
+export const setTicketStatusRequestSchema = z.object({
+  status: ticketStatusSchema,
+});
+export type SetTicketStatusRequest = z.infer<typeof setTicketStatusRequestSchema>;
+
+export const adminTicketResponseSchema = z.object({ ticket: adminQueueTicketSchema });
+export type AdminTicketResponse = z.infer<typeof adminTicketResponseSchema>;
+
+// What an Admin sees while working a Ticket: the facts about the Book and the Author's royalties.
+export const adminWorkspaceResponseSchema = adminTicketResponseSchema.extend({
+  // Null means General / Account Level.
+  book: bookSchema.nullable(),
+  royalty: royaltySummarySchema,
+});
+export type AdminWorkspaceResponse = z.infer<typeof adminWorkspaceResponseSchema>;

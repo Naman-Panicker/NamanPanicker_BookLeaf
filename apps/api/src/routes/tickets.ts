@@ -4,19 +4,25 @@ import {
   authorTicketResponseSchema,
   type AuthorTicketResponse,
   createTicketRequestSchema,
-  type Message,
+  messageResponseSchema,
+  type MessageResponse,
   myTicketsResponseSchema,
   type MyTicketsResponse,
+  sendMessageRequestSchema,
+  type TicketEvent,
+  ticketEventsResponseSchema,
+  type TicketEventsResponse,
   ticketMessagesResponseSchema,
   type TicketMessagesResponse,
   ticketParamsSchema,
 } from '@bookleaf/shared';
-import { currentAuthorId } from '../auth/sessions';
+import { currentAuthorId, currentSession, type Session } from '../auth/sessions';
 import type { Clock } from '../clock';
 import type { PrismaClient } from '../db';
 import type { Prisma } from '../generated/prisma/client';
 import { notFound } from '../http/errors';
 import type { createRoutes } from '../http/routes';
+import { accessibleTicket, changeStatus, messageSelect, sendMessage, toMessage } from '../ticket-lifecycle';
 
 type Deps = {
   routes: ReturnType<typeof createRoutes>;
@@ -47,23 +53,60 @@ function toAuthorTicket(record: AuthorTicketRecord): AuthorTicket {
   };
 }
 
-// Likewise, this leaves out which Admin wrote a Message.
-const messageSelect = {
+const eventOrder = [{ createdAt: 'asc' }, { id: 'asc' }] satisfies Prisma.TicketEventOrderByWithRelationInput[];
+
+// Likewise, this leaves out the Admin's name and any reason.
+const eventSelect = {
   id: true,
+  kind: true,
   authorId: true,
-  body: true,
+  before: true,
+  after: true,
   createdAt: true,
-} satisfies Prisma.MessageSelect;
+} satisfies Prisma.TicketEventSelect;
 
-type MessageRecord = Prisma.MessageGetPayload<{ select: typeof messageSelect }>;
+type EventRecord = Prisma.TicketEventGetPayload<{ select: typeof eventSelect }>;
 
-function toMessage(record: MessageRecord): Message {
+function toTicketEvent(record: EventRecord): TicketEvent {
   return {
     id: record.id,
-    sender: record.authorId === null ? 'ADMIN' : 'AUTHOR',
-    body: record.body,
+    kind: record.kind,
+    actor: record.authorId === null ? 'ADMIN' : 'AUTHOR',
+    before: record.before,
+    after: record.after,
     createdAt: record.createdAt.toISOString(),
   };
+}
+
+async function listAuthorEvents(prisma: PrismaClient, session: Session, ticketId: string) {
+  const record = await prisma.ticket.findFirst({
+    where: accessibleTicket(session, ticketId),
+    select: { events: { where: { visibleToAuthor: true }, orderBy: eventOrder, select: eventSelect } },
+  });
+  return record?.events.map(toTicketEvent);
+}
+
+async function listAdminEvents(prisma: PrismaClient, session: Session, ticketId: string) {
+  const record = await prisma.ticket.findFirst({
+    where: accessibleTicket(session, ticketId),
+    select: {
+      events: {
+        orderBy: eventOrder,
+        select: {
+          ...eventSelect,
+          reason: true,
+          author: { select: { name: true } },
+          admin: { select: { name: true } },
+        },
+      },
+    },
+  });
+  return record?.events.map((event) => ({
+    ...toTicketEvent(event),
+    // The migration's check means one of the two is always set.
+    actorName: (event.author ?? event.admin)?.name,
+    reason: event.reason,
+  }));
 }
 
 export function addTicketRoutes({ routes, prisma, clock }: Deps) {
@@ -150,7 +193,7 @@ export function addTicketRoutes({ routes, prisma, clock }: Deps) {
     {
       method: 'get',
       path: '/api/tickets/:ticketId/messages',
-      summary: "List the Messages in one of the current Author's Tickets, oldest first",
+      summary: 'List the Messages in a Ticket, oldest first, as its Author or as an Admin',
       tag: 'Tickets',
       params: ticketParamsSchema,
       responses: {
@@ -160,11 +203,78 @@ export function addTicketRoutes({ routes, prisma, clock }: Deps) {
     },
     async (_req, res, { params }) => {
       const record = await prisma.ticket.findFirst({
-        where: { id: params.ticketId, authorId: currentAuthorId(res) },
+        where: accessibleTicket(currentSession(res), params.ticketId),
         select: { messages: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: messageSelect } },
       });
       if (!record) throw notFound();
       res.json({ messages: record.messages.map(toMessage) } satisfies TicketMessagesResponse);
+    },
+  );
+
+  routes.add(
+    {
+      method: 'post',
+      path: '/api/tickets/:ticketId/messages',
+      summary: 'Send a Message on a Ticket, as its Author or as an Admin',
+      tag: 'Tickets',
+      params: ticketParamsSchema,
+      body: sendMessageRequestSchema,
+      responses: {
+        201: { description: 'The Message.', schema: messageResponseSchema },
+        404: { description: 'The Ticket does not exist, or belongs to another Author.', schema: apiErrorSchema },
+        409: { description: 'The Ticket is Closed, or has just changed.', schema: apiErrorSchema },
+      },
+    },
+    async (_req, res, { params, body }) => {
+      const message = await sendMessage({ prisma, clock }, currentSession(res), params.ticketId, body.body);
+      res.status(201).json({ message } satisfies MessageResponse);
+    },
+  );
+
+  routes.add(
+    {
+      method: 'post',
+      path: '/api/tickets/:ticketId/resolution-confirmation',
+      summary: "Confirm that a Resolved Ticket solved the current Author's problem, which closes it",
+      tag: 'Tickets',
+      params: ticketParamsSchema,
+      responses: {
+        200: { description: 'The Ticket, now Closed.', schema: authorTicketResponseSchema },
+        404: { description: 'The Ticket does not exist, or belongs to another Author.', schema: apiErrorSchema },
+        409: { description: 'The Ticket is not Resolved.', schema: apiErrorSchema },
+      },
+    },
+    async (_req, res, { params }) => {
+      const authorId = currentAuthorId(res);
+      await changeStatus({ prisma, clock }, currentSession(res), params.ticketId, { type: 'CONFIRM_RESOLUTION' });
+      const record = await prisma.ticket.findFirstOrThrow({
+        where: { id: params.ticketId, authorId },
+        select: authorTicketSelect,
+      });
+      res.json({ ticket: toAuthorTicket(record) } satisfies AuthorTicketResponse);
+    },
+  );
+
+  routes.add(
+    {
+      method: 'get',
+      path: '/api/tickets/:ticketId/events',
+      summary: "List a Ticket's Ticket Events, oldest first. Authors see only status changes",
+      tag: 'Tickets',
+      params: ticketParamsSchema,
+      responses: {
+        200: { description: 'The Ticket Events the caller may see.', schema: ticketEventsResponseSchema },
+        404: { description: 'The Ticket does not exist, or belongs to another Author.', schema: apiErrorSchema },
+      },
+    },
+    async (_req, res, { params }) => {
+      const session = currentSession(res);
+      const events =
+        session.role === 'ADMIN'
+          ? await listAdminEvents(prisma, session, params.ticketId)
+          : await listAuthorEvents(prisma, session, params.ticketId);
+      if (!events) throw notFound();
+      res.json({ events } satisfies TicketEventsResponse);
     },
   );
 }

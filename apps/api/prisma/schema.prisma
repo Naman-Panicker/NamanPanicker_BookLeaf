@@ -52,6 +52,19 @@ enum PriorityFloor {
   OVERDUE_ROYALTY
 }
 
+enum TicketEventKind {
+  STATUS_CHANGED
+  ASSIGNED
+  UNASSIGNED
+  TAKEOVER_REQUESTED
+  TAKEOVER_ACCEPTED
+  TAKEOVER_DECLINED
+  TAKEOVER_CANCELLED
+  TAKEOVER_FORCED
+  CATEGORY_OVERRIDDEN
+  PRIORITY_OVERRIDDEN
+}
+
 model Author {
   id           String    @id @default(uuid())
   // The sample data's author ID, such as AUTH001.
@@ -67,6 +80,7 @@ model Author {
   books        Book[]
   tickets      Ticket[]
   messages     Message[]
+  ticketEvents TicketEvent[]
 
   @@map("authors")
 }
@@ -80,6 +94,7 @@ model Admin {
   updatedAt       DateTime  @updatedAt @map("updated_at")
   messages        Message[]
   assignedTickets Ticket[]
+  ticketEvents    TicketEvent[]
 
   @@map("admins")
 }
@@ -143,6 +158,7 @@ model Ticket {
   createdAt              DateTime              @default(now()) @map("created_at")
   updatedAt              DateTime              @updatedAt @map("updated_at")
   messages               Message[]
+  events                 TicketEvent[]
 
   @@index([authorId])
   @@index([bookId])
@@ -165,4 +181,25 @@ model Message {
 
   @@index([ticketId, createdAt])
   @@map("messages")
+}
+
+// Made by either an Author or an Admin. The migration adds a check that exactly one is set.
+model TicketEvent {
+  id              String          @id @default(uuid())
+  ticketId        String          @map("ticket_id")
+  ticket          Ticket          @relation(fields: [ticketId], references: [id])
+  kind            TicketEventKind
+  authorId        String?         @map("author_id")
+  author          Author?         @relation(fields: [authorId], references: [id], onDelete: Restrict)
+  adminId         String?         @map("admin_id")
+  admin           Admin?          @relation(fields: [adminId], references: [id], onDelete: Restrict)
+  before          String?
+  after           String?
+  reason          String?
+  // Defaults to hidden, so a Ticket Event only reaches Authors if something says it should.
+  visibleToAuthor Boolean         @default(false) @map("visible_to_author")
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  @@index([ticketId, createdAt])
+  @@map("ticket_events")
 }

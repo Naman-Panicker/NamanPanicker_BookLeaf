@@ -16,6 +16,8 @@ export const unauthenticated = () => new ApiError(401, 'UNAUTHENTICATED', 'Sign 
 
 export const notFound = () => new ApiError(404, 'NOT_FOUND', 'Not found.');
 
+export const conflict = (message: string) => new ApiError(409, 'CONFLICT', message);
+
 export const validationFailed = (details: ValidationDetails) =>
   new ApiError(400, 'VALIDATION_FAILED', 'The request is not valid.', details);
 

@@ -62,7 +62,7 @@ export function createApp({ cookieSecure, sessionSecret, prisma, clock }: AppOpt
   addSessionRoutes({ routes, prisma, sessions });
   addBookRoutes({ routes, prisma, clock });
   addTicketRoutes({ routes, prisma, clock });
-  addAdminTicketRoutes({ routes, prisma });
+  addAdminTicketRoutes({ routes, prisma, clock });
 
   app.use(routes.router);
   app.use(createDocsRouter(routes.specs));

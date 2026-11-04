@@ -1,13 +1,19 @@
 import {
   type AdminQueueQuery,
   adminQueueResponseSchema,
+  adminTicketResponseSchema,
+  adminWorkspaceResponseSchema,
   apiErrorSchema,
   authorTicketResponseSchema,
   type CreateTicketRequest,
+  messageResponseSchema,
   myBooksResponseSchema,
   myTicketsResponseSchema,
+  type SendMessageRequest,
   sessionResponseSchema,
+  type SetTicketStatusRequest,
   type LoginRequest,
+  ticketEventsResponseSchema,
   ticketMessagesResponseSchema,
   validationDetailsSchema,
 } from '@bookleaf/shared';
@@ -30,6 +36,11 @@ export class ApiRequestError extends Error {
     if (!parsed.success) return {};
     return Object.fromEntries(parsed.data.fields.map(({ field, message }) => [field, message]));
   }
+}
+
+// What to show when a button or form on a page fails.
+export function actionErrorMessage(error: unknown) {
+  return error instanceof ApiRequestError ? error.message : 'Something went wrong. Please try again.';
 }
 
 async function toApiRequestError(res: Response) {
@@ -129,8 +140,43 @@ export async function getTicketMessages(ticketId: string) {
   return ticketMessagesResponseSchema.parse(await res.json()).messages;
 }
 
+export async function sendTicketMessage(ticketId: string, message: SendMessageRequest) {
+  const res = await authenticated(`/api/tickets/${encodeURIComponent(ticketId)}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(message),
+  });
+  return messageResponseSchema.parse(await res.json()).message;
+}
+
+export async function getTicketEvents(ticketId: string) {
+  const res = await authenticated(`/api/tickets/${encodeURIComponent(ticketId)}/events`);
+  return ticketEventsResponseSchema.parse(await res.json()).events;
+}
+
+export async function confirmResolution(ticketId: string) {
+  const res = await authenticated(`/api/tickets/${encodeURIComponent(ticketId)}/resolution-confirmation`, {
+    method: 'POST',
+  });
+  return authorTicketResponseSchema.parse(await res.json()).ticket;
+}
+
 export async function getAdminQueue(query: AdminQueueQuery) {
   const entries = Object.entries(query).filter(([, value]) => value !== undefined);
   const res = await authenticated(`/api/admin/tickets?${new URLSearchParams(entries).toString()}`);
   return adminQueueResponseSchema.parse(await res.json()).tickets;
+}
+
+export async function getAdminWorkspace(ticketId: string) {
+  const res = await authenticated(`/api/admin/tickets/${encodeURIComponent(ticketId)}`);
+  return adminWorkspaceResponseSchema.parse(await res.json());
+}
+
+export async function setTicketStatus(ticketId: string, request: SetTicketStatusRequest) {
+  const res = await authenticated(`/api/admin/tickets/${encodeURIComponent(ticketId)}/status`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+  return adminTicketResponseSchema.parse(await res.json()).ticket;
 }

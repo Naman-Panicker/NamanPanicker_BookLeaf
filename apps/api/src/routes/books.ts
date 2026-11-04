@@ -23,7 +23,7 @@ type Deps = {
   clock: Clock;
 };
 
-function toBook(record: BookRecord): Book {
+export function toBook(record: BookRecord): Book {
   return {
     id: record.id,
     externalRef: record.externalRef,

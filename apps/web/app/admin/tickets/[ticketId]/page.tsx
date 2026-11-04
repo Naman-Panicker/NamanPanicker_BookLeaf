@@ -1,0 +1,263 @@
+'use client';
+
+import {
+  type AdminWorkspaceResponse,
+  type Book,
+  CATEGORY_LABELS,
+  GENERAL_ACCOUNT_LEVEL_LABEL,
+  isPublished,
+  type Message,
+  PAYOUT_THRESHOLD,
+  PRODUCTION_STAGE_LABELS,
+  type RoyaltySummary,
+  TICKET_STATUS_LABELS,
+  type TicketEvent,
+  type TicketStatus,
+  ticketStatusSchema,
+} from '@bookleaf/shared';
+import Link from 'next/link';
+import { notFound, useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { Figure } from '@/components/figure';
+import { MessageEditor } from '@/components/message-editor';
+import { TicketStatusBadge } from '@/components/ticket-status-badge';
+import { TicketThread } from '@/components/ticket-thread';
+import { PriorityBadge, UnclassifiedBadge } from '@/components/triage-badges';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import {
+  actionErrorMessage,
+  ApiRequestError,
+  getAdminWorkspace,
+  getTicketEvents,
+  getTicketMessages,
+  setTicketStatus,
+} from '@/lib/api';
+import { formatCount, formatDate, formatDay, formatRupees } from '@/lib/format';
+
+type Workspace = AdminWorkspaceResponse & { messages: Message[]; events: TicketEvent[] };
+
+export default function AdminTicketPage() {
+  const { ticketId } = useParams<{ ticketId: string }>();
+  const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [missing, setMissing] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  // Going up reloads the workspace, until live updates arrive.
+  const [version, setVersion] = useState(0);
+
+  useEffect(() => {
+    // A slow answer must not overwrite the one from a later reload.
+    let superseded = false;
+    Promise.all([getAdminWorkspace(ticketId), getTicketMessages(ticketId), getTicketEvents(ticketId)]).then(
+      ([facts, messages, events]) => {
+        if (!superseded) setWorkspace({ ...facts, messages, events });
+      },
+      (error: unknown) => {
+        if (superseded) return;
+        if (error instanceof ApiRequestError && error.status === 404) setMissing(true);
+        else setLoadFailed(true);
+      },
+    );
+    return () => {
+      superseded = true;
+    };
+  }, [ticketId, version]);
+
+  if (missing) notFound();
+  if (loadFailed) {
+    return <p className="text-sm text-destructive">Could not load this Ticket. Please reload the page.</p>;
+  }
+  if (!workspace) {
+    return <p className="text-sm text-muted-foreground">Loading…</p>;
+  }
+
+  const { ticket, book, royalty, messages, events } = workspace;
+  const reload = () => setVersion((current) => current + 1);
+  return (
+    <div className="mx-auto flex max-w-7xl flex-col gap-6">
+      <Link href="/admin" className="text-sm underline underline-offset-4">
+        Back to the queue
+      </Link>
+      <div className="flex flex-col gap-2">
+        <p className="text-sm break-words text-muted-foreground">
+          {ticket.reference} · {ticket.author.name} · {ticket.book?.title ?? GENERAL_ACCOUNT_LEVEL_LABEL} · raised{' '}
+          {formatDay(ticket.createdAt)}
+        </p>
+        <h1 className="text-xl font-semibold break-words">{ticket.subject}</h1>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <TicketStatusBadge status={ticket.status} />
+          {ticket.priority ? <PriorityBadge priority={ticket.priority} /> : <UnclassifiedBadge />}
+          {ticket.category && <span>{CATEGORY_LABELS[ticket.category]}</span>}
+          <span className="text-muted-foreground">{ticket.assignee?.name ?? 'Unassigned'}</span>
+        </div>
+      </div>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="flex min-w-0 flex-col gap-6">
+          <TicketThread
+            messages={messages}
+            events={events}
+            nameOf={(side) => (side === 'AUTHOR' ? ticket.author.name : 'BookLeaf')}
+          />
+          {ticket.status === 'CLOSED' ? (
+            <p className="rounded-md bg-muted p-3 text-sm">
+              This Ticket is Closed, so it can&apos;t take new Messages. Set another status to reopen it.
+            </p>
+          ) : (
+            <MessageEditor ticketId={ticket.id} label="Message to the Author" onChanged={reload} />
+          )}
+        </div>
+        <aside className="flex flex-col gap-6">
+          <StatusControls ticketId={ticket.id} status={ticket.status} onChanged={reload} />
+          <BookCard book={book} />
+          <RoyaltyCard royalty={royalty} />
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+function StatusControls({
+  ticketId,
+  status,
+  onChanged,
+}: {
+  ticketId: string;
+  status: TicketStatus;
+  onChanged: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function change(next: TicketStatus) {
+    setError(null);
+    setSaving(true);
+    try {
+      await setTicketStatus(ticketId, { status: next });
+      onChanged();
+    } catch (failure) {
+      setError(actionErrorMessage(failure));
+      if (failure instanceof ApiRequestError && failure.code === 'CONFLICT') onChanged();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Ticket Status</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="flex flex-wrap gap-2">
+          {status !== 'RESOLVED' && status !== 'CLOSED' && (
+            <Button size="sm" disabled={saving} onClick={() => change('RESOLVED')}>
+              Mark Resolved
+            </Button>
+          )}
+          {status !== 'CLOSED' && (
+            <Button size="sm" variant="outline" disabled={saving} onClick={() => change('CLOSED')}>
+              Close
+            </Button>
+          )}
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="ticket-status" className="text-xs text-muted-foreground">
+            Set status
+          </Label>
+          <NativeSelect
+            id="ticket-status"
+            className="w-full"
+            value={status}
+            disabled={saving}
+            onChange={(event) => change(ticketStatusSchema.parse(event.target.value))}
+          >
+            {ticketStatusSchema.options.map((option) => (
+              <NativeSelectOption key={option} value={option}>
+                {TICKET_STATUS_LABELS[option]}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </div>
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function BookCard({ book }: { book: Book | null }) {
+  if (!book) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{GENERAL_ACCOUNT_LEVEL_LABEL}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">This Ticket isn&apos;t about a specific Book.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const neverPaid = isPublished(book.productionStage) && book.lastPayoutDate === null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="break-words">{book.title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid grid-cols-2 gap-3 text-sm">
+          <Figure label="Production Stage" value={PRODUCTION_STAGE_LABELS[book.productionStage]} />
+          <Figure label="Genre" value={book.genre} />
+          <Figure label="ISBN" value={book.isbn} />
+          <Figure label="Publication date" value={formatDate(book.publicationDate)} />
+          <Figure label="MRP" value={formatRupees(book.mrp)} />
+          <Figure label="Royalty per copy" value={formatRupees(book.royaltyPerCopy)} />
+          <Figure label="Copies sold" value={formatCount(book.copiesSold)} />
+          <Figure label="Royalty earned" value={formatRupees(book.royaltyEarned)} />
+          <Figure label="Royalty paid" value={formatRupees(book.royaltyPaid)} />
+          <Figure label="Pending Royalty" value={formatRupees(book.royaltyPending)} />
+          <Figure label="Last Payout" value={neverPaid ? 'Never paid' : formatDate(book.lastPayoutDate)} />
+          <Figure label="Print partner" value={book.printPartner ?? '—'} />
+          <Figure label="Available on" value={book.availableOn.join(', ') || '—'} />
+        </dl>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RoyaltyCard({ royalty }: { royalty: RoyaltySummary }) {
+  // With no published Book the totals are null, and a Payout isn't something that could have happened yet.
+  const neverPaid = royalty.totalEarned !== null && royalty.lastPayoutDate === null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Author&apos;s royalties</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <dl className="grid grid-cols-2 gap-3 text-sm">
+          <Figure label="Total earned" value={formatRupees(royalty.totalEarned)} />
+          <Figure label="Total paid" value={formatRupees(royalty.totalPaid)} />
+          <Figure label="Pending Royalty" value={formatRupees(royalty.totalPending)} />
+          <Figure label="Last Payout" value={neverPaid ? 'Never paid' : formatDate(royalty.lastPayoutDate)} />
+          <Figure label="Next Payout Date" value={formatDate(royalty.nextPayoutDate)} />
+        </dl>
+        {royalty.belowThreshold && (
+          <p className="rounded-md bg-muted p-3 text-sm">
+            Below the {formatRupees(PAYOUT_THRESHOLD)} Payout Threshold, so it rolls over to next quarter.
+          </p>
+        )}
+        {royalty.overdue && (
+          <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            Overdue: the last Payout window closed without a Payout.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

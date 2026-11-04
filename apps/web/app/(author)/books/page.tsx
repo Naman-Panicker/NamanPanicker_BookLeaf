@@ -10,6 +10,7 @@ import {
 } from '@bookleaf/shared';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { Figure } from '@/components/figure';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { getMyBooks } from '@/lib/api';
@@ -123,14 +124,5 @@ function BookCard({ book }: { book: Book }) {
         </dl>
       </CardContent>
     </Card>
-  );
-}
-
-function Figure({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-0.5">
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      <dd className="font-medium break-words">{value}</dd>
-    </div>
   );
 }
