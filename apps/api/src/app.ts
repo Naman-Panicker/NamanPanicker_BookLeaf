@@ -8,7 +8,6 @@ import { createClassifier } from './classification';
 import type { Clock } from './clock';
 import type { PrismaClient } from './db';
 import { createDrafts } from './drafts';
-import type { EventPublisher } from './events';
 import { createDocsRouter } from './http/docs';
 import { errorHandler, notFound } from './http/errors';
 import { createRoutes } from './http/routes';
@@ -22,7 +21,6 @@ export type AppOptions = {
   sessionSecret: string;
   prisma: PrismaClient;
   clock: Clock;
-  publisher: EventPublisher;
   ai: AiClient;
 };
 

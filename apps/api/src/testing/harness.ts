@@ -5,7 +5,6 @@ import { createApp } from '../app';
 import type { Clock } from '../clock';
 import { createPrisma } from '../db';
 import type { Prisma } from '../generated/prisma/client';
-import type { AppEvent, EventPublisher } from '../events';
 import { testDatabaseUrl } from './test-database';
 
 export const prisma = createPrisma(testDatabaseUrl());
@@ -32,13 +31,6 @@ export function fakeClock() {
       now = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
     },
   } satisfies Clock & Record<string, unknown>;
-}
-
-export function recordingPublisher() {
-  const events: AppEvent[] = [];
-  return { events, publish: (event: AppEvent) => void events.push(event) } satisfies EventPublisher & {
-    events: AppEvent[];
-  };
 }
 
 // Gives each answer in turn, then keeps repeating the last. An Error makes that attempt fail.
@@ -91,7 +83,6 @@ export function makeTestServer(overrides: AppOverrides = {}) {
     sessionSecret: SESSION_SECRET,
     prisma,
     clock: fakeClock(),
-    publisher: recordingPublisher(),
     ai: silentAi,
     ...overrides,
   });

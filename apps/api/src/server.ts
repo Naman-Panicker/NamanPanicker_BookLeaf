@@ -3,7 +3,6 @@ import { createApp } from './app';
 import { systemClock } from './clock';
 import { loadConfig } from './config';
 import { createPrisma } from './db';
-import { noopPublisher } from './events';
 
 const { databaseUrl, sessionSecret, port, cookieSecure, geminiApiKey, aiModel } = loadConfig(process.env);
 
@@ -16,7 +15,6 @@ const { app, classifier } = createApp({
   sessionSecret,
   prisma: createPrisma(databaseUrl),
   clock: systemClock,
-  publisher: noopPublisher,
   ai: createGeminiAiClient({ apiKey: geminiApiKey, model: aiModel }),
 });
 
