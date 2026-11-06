@@ -3,8 +3,7 @@
 A web app where BookLeaf's Authors raise support Tickets about their Books and accounts, and where BookLeaf's Admins triage and answer them with AI assistance. The AI classifies each Ticket and writes a Draft reply. An Admin always checks the Draft before it reaches an Author.
 
 **Live demo:** https://naman-panicker-book-leaf.vercel.app  
-**API docs (Swagger UI):** https://naman-panicker-book-leaf.vercel.app/docs  
-**Write-up:** [WRITEUP.pdf](WRITEUP.pdf)
+**API docs (Swagger UI):** https://naman-panicker-book-leaf.vercel.app/docs
 
 The demo runs on free tiers, so the first request after about 15 minutes idle can take around a minute while the API wakes up. If sign-in says it can't reach BookLeaf, wait a moment and try again.
 
