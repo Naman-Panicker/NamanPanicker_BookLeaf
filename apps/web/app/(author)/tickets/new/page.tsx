@@ -13,6 +13,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { Loading } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import { ApiRequestError, createTicket, getMyBooks } from '@/lib/api';
 
@@ -77,12 +78,12 @@ export default function NewTicketPage() {
     return <p className="text-sm text-destructive">Could not load your Books. Please reload the page.</p>;
   }
   if (!books) {
-    return <p className="text-sm text-muted-foreground">Loading…</p>;
+    return <Loading label="Loading your Books…" />;
   }
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
-      <h1 className="text-xl font-semibold">New Ticket</h1>
+      <h1>New Ticket</h1>
       <Card>
         <CardContent>
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
@@ -112,7 +113,7 @@ export default function NewTicketPage() {
                 {formError}
               </p>
             )}
-            <Button type="submit" disabled={submitting} className="self-start">
+            <Button type="submit" pending={submitting} className="self-start">
               {submitting ? 'Sending…' : 'Raise Ticket'}
             </Button>
           </form>

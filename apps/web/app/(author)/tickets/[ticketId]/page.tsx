@@ -15,6 +15,7 @@ import { TicketStatusBadge } from '@/components/ticket-status-badge';
 import { TicketThread } from '@/components/ticket-thread';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loading } from '@/components/ui/spinner';
 import {
   actionErrorMessage,
   ApiRequestError,
@@ -24,7 +25,7 @@ import {
   getTicketMessages,
 } from '@/lib/api';
 
-type Thread = { ticket: AuthorTicket; messages: Message[]; events: TicketEvent[] };
+type Thread = { ticket: AuthorTicket; messages: Message[]; events: TicketEvent[]; loadedVersion: number };
 
 function nameOf(side: Role) {
   return side === 'AUTHOR' ? 'You' : 'BookLeaf';
@@ -43,7 +44,7 @@ export default function TicketThreadPage() {
     let superseded = false;
     Promise.all([getTicket(ticketId), getTicketMessages(ticketId), getTicketEvents(ticketId)]).then(
       ([ticket, messages, events]) => {
-        if (!superseded) setThread({ ticket, messages, events });
+        if (!superseded) setThread({ ticket, messages, events, loadedVersion: version });
       },
       (error: unknown) => {
         if (superseded) return;
@@ -61,24 +62,25 @@ export default function TicketThreadPage() {
     return <p className="text-sm text-destructive">Could not load this Ticket. Please reload the page.</p>;
   }
   if (!thread) {
-    return <p className="text-sm text-muted-foreground">Loading…</p>;
+    return <Loading label="Loading this Ticket…" />;
   }
 
-  const { ticket, messages, events } = thread;
+  const { ticket, messages, events, loadedVersion } = thread;
   const reload = () => setVersion((current) => current + 1);
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
-      <Link href="/tickets" className="text-sm underline underline-offset-4">
+      <Link href="/tickets" className="text-sm text-link underline underline-offset-4">
         Back to My Tickets
       </Link>
       <div className="flex flex-col gap-2">
         <p className="text-sm text-muted-foreground">
           {ticket.reference} · {ticket.book?.title ?? GENERAL_ACCOUNT_LEVEL_LABEL}
         </p>
-        <h1 className="text-xl font-semibold break-words">{ticket.subject}</h1>
+        <h1 className="break-words">{ticket.subject}</h1>
         <TicketStatusBadge status={ticket.status} />
       </div>
       <TicketThread messages={messages} events={events} nameOf={nameOf} />
+      {loadedVersion !== version && <Loading label="Updating…" />}
       {ticket.status === 'CLOSED' ? (
         <ClosedHint />
       ) : (
@@ -98,7 +100,7 @@ function ClosedHint() {
         <CardTitle>This Ticket is Closed</CardTitle>
         <CardDescription>
           Still need help?{' '}
-          <Link href="/tickets/new" className="underline underline-offset-4">
+          <Link href="/tickets/new" className="text-link underline underline-offset-4">
             Raise a new Ticket
           </Link>{' '}
           and we&apos;ll pick it up from there.
@@ -140,7 +142,7 @@ function ConfirmResolution({ ticketId, onChanged }: { ticketId: string; onChange
             {error}
           </p>
         )}
-        <Button onClick={confirm} disabled={confirming} className="self-start">
+        <Button onClick={confirm} pending={confirming} className="self-start">
           This solved my problem
         </Button>
       </CardContent>

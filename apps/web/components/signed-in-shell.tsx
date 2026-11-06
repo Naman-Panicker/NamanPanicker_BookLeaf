@@ -4,8 +4,11 @@ import type { Role, SessionUser } from '@bookleaf/shared';
 import Link from 'next/link';
 import { notFound, usePathname } from 'next/navigation';
 import { type ReactNode, useEffect, useState } from 'react';
+import { BookLeafLogo } from '@/components/bookleaf-logo';
 import { Button } from '@/components/ui/button';
+import { Loading } from '@/components/ui/spinner';
 import { getCurrentUser, logOut, SIGN_IN_PATH } from '@/lib/api';
+import { homePath } from '@/lib/home-path';
 
 type Props = {
   role: Role;
@@ -25,7 +28,8 @@ function AuthorNav() {
         <Link
           key={href}
           href={href}
-          className={pathname.startsWith(href) ? 'font-medium' : 'text-muted-foreground hover:text-foreground'}
+          aria-current={pathname.startsWith(href) ? 'page' : undefined}
+          className={pathname.startsWith(href) ? 'font-bold text-link' : 'text-muted-foreground hover:text-foreground'}
         >
           {label}
         </Link>
@@ -39,6 +43,7 @@ function AuthorNav() {
 export function SignedInShell({ role, children }: Props) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     getCurrentUser().then(setUser, () => setLoadFailed(true));
@@ -48,30 +53,46 @@ export function SignedInShell({ role, children }: Props) {
     return <p className="p-6 text-sm text-destructive">Could not load your account. Please reload the page.</p>;
   }
   if (!user) {
-    return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
+    return <Loading className="p-6" />;
   }
   if (user.role !== role) notFound();
 
   async function signOut() {
-    await logOut();
-    window.location.assign(SIGN_IN_PATH);
+    setSigningOut(true);
+    try {
+      await logOut();
+      window.location.assign(SIGN_IN_PATH);
+    } catch (failure) {
+      setSigningOut(false);
+      throw failure;
+    }
   }
 
   return (
     <div className="min-h-svh">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:bg-background focus:px-3 focus:py-2 focus:text-sm"
+      >
+        Skip to content
+      </a>
       <header className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-3">
         <div className="flex items-center gap-6">
-          <span className="font-medium">BookLeaf</span>
+          <Link href={homePath(role)}>
+            <BookLeafLogo className="h-9 w-auto" />
+          </Link>
           {role === 'AUTHOR' && <AuthorNav />}
         </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">{user.name}</span>
-          <Button variant="outline" size="sm" onClick={signOut}>
+          <Button variant="outline" size="sm" pending={signingOut} onClick={signOut}>
             Sign out
           </Button>
         </div>
       </header>
-      <main className="p-6">{children}</main>
+      <main id="main-content" className="p-6">
+        {children}
+      </main>
     </div>
   );
 }

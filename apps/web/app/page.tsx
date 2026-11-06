@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import { Loading } from '@/components/ui/spinner';
 import { findCurrentUser, SIGN_IN_PATH } from '@/lib/api';
 import { homePath } from '@/lib/home-path';
 
@@ -15,5 +16,5 @@ export default function RootPage() {
     );
   }, [router]);
 
-  return <p className="p-6 text-sm text-muted-foreground">Loading…</p>;
+  return <Loading className="p-6" />;
 }

@@ -4,6 +4,7 @@ import type { TicketDraftResponse } from '@bookleaf/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageForm } from '@/components/message-editor';
 import { Button } from '@/components/ui/button';
+import { Loading } from '@/components/ui/spinner';
 import { ApiRequestError, getTicketDraft, regenerateTicketDraft } from '@/lib/api';
 
 type Props = {
@@ -93,9 +94,9 @@ function DraftNotice({ editor: { aiWritten, status } }: { editor: Editor }) {
   return (
     <>
       {status === 'WRITING' && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Writing a Draft…
-        </p>
+        <div role="status">
+          <Loading label="Writing a Draft…" />
+        </div>
       )}
       {status === 'NOTHING_TO_ANSWER' && (
         <p role="status" className="text-sm text-muted-foreground">
@@ -103,7 +104,7 @@ function DraftNotice({ editor: { aiWritten, status } }: { editor: Editor }) {
         </p>
       )}
       {status === 'UNAVAILABLE' && (
-        <p role="status" className="rounded-md bg-amber-50 p-2 text-sm dark:bg-amber-950/30">
+        <p role="status" className="rounded-md bg-note p-2 text-sm">
           The AI couldn&apos;t write a Draft just now, so please write this Message yourself, or try again.
         </p>
       )}

@@ -13,8 +13,10 @@ import { useEffect, useState } from 'react';
 import { Figure } from '@/components/figure';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loading } from '@/components/ui/spinner';
 import { getMyBooks } from '@/lib/api';
 import { formatCount, formatDate, formatRupees } from '@/lib/format';
+import { cn } from '@/lib/utils';
 
 export default function MyBooksPage() {
   const [data, setData] = useState<MyBooksResponse | null>(null);
@@ -28,12 +30,12 @@ export default function MyBooksPage() {
     return <p className="text-sm text-destructive">Could not load your Books. Please reload the page.</p>;
   }
   if (!data) {
-    return <p className="text-sm text-muted-foreground">Loading…</p>;
+    return <Loading label="Loading your Books…" />;
   }
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
-      <h1 className="text-xl font-semibold">My Books</h1>
+      <h1>My Books</h1>
       {data.books.length === 0 ? (
         <EmptyState />
       ) : (
@@ -87,7 +89,7 @@ function RoyaltyStrip({ royalty }: { royalty: RoyaltySummary }) {
           <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
             Your Pending Royalty of {formatRupees(royalty.totalPending)} is Overdue: our records show the last
             Payout window closed without a Payout. Please{' '}
-            <Link href="/tickets/new" className="underline underline-offset-4">
+            <Link href="/tickets/new" className="text-link underline underline-offset-4">
               raise a Ticket
             </Link>{' '}
             and we&apos;ll look into it.
@@ -107,7 +109,7 @@ function BookCard({ book }: { book: Book }) {
       <CardHeader>
         <CardTitle>{book.title}</CardTitle>
         <CardDescription>{book.genre}</CardDescription>
-        <Badge variant={published ? 'default' : 'secondary'} className="mt-1">
+        <Badge className={cn('mt-1', published ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800')}>
           {PRODUCTION_STAGE_LABELS[book.productionStage]}
         </Badge>
       </CardHeader>

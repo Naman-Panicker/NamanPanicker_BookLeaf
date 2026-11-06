@@ -36,6 +36,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { Loading } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
 import {
   actionErrorMessage,
@@ -52,7 +53,12 @@ import {
 } from '@/lib/api';
 import { formatCount, formatDate, formatDay, formatRupees } from '@/lib/format';
 
-type Workspace = AdminWorkspaceResponse & { messages: Message[]; events: TicketEvent[]; notes: InternalNote[] };
+type Workspace = AdminWorkspaceResponse & {
+  messages: Message[];
+  events: TicketEvent[];
+  notes: InternalNote[];
+  loadedVersion: number;
+};
 
 export default function AdminTicketPage() {
   const { ticketId } = useParams<{ ticketId: string }>();
@@ -72,7 +78,7 @@ export default function AdminTicketPage() {
       getInternalNotes(ticketId),
     ]).then(
       ([facts, messages, events, notes]) => {
-        if (!superseded) setWorkspace({ ...facts, messages, events, notes });
+        if (!superseded) setWorkspace({ ...facts, messages, events, notes, loadedVersion: version });
       },
       (error: unknown) => {
         if (superseded) return;
@@ -90,14 +96,15 @@ export default function AdminTicketPage() {
     return <p className="text-sm text-destructive">Could not load this Ticket. Please reload the page.</p>;
   }
   if (!workspace) {
-    return <p className="text-sm text-muted-foreground">Loading…</p>;
+    return <Loading label="Loading this Ticket…" />;
   }
 
-  const { ticket, book, royalty, messages, events, notes } = workspace;
+  const { ticket, book, royalty, messages, events, notes, loadedVersion } = workspace;
+  const updating = loadedVersion !== version;
   const reload = () => setVersion((current) => current + 1);
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
-      <Link href="/admin" className="text-sm underline underline-offset-4">
+      <Link href="/admin" className="text-sm text-link underline underline-offset-4">
         Back to the queue
       </Link>
       <div className="flex flex-col gap-2">
@@ -105,7 +112,7 @@ export default function AdminTicketPage() {
           {ticket.reference} · {ticket.author.name} · {ticket.book?.title ?? GENERAL_ACCOUNT_LEVEL_LABEL} · raised{' '}
           {formatDay(ticket.createdAt)}
         </p>
-        <h1 className="text-xl font-semibold break-words">{ticket.subject}</h1>
+        <h1 className="break-words">{ticket.subject}</h1>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <TicketStatusBadge status={ticket.status} />
           <PriorityTriage ticket={ticket} />
@@ -122,6 +129,7 @@ export default function AdminTicketPage() {
             notes={notes}
             nameOf={(side) => (side === 'AUTHOR' ? ticket.author.name : 'BookLeaf')}
           />
+          {updating && <Loading label="Updating…" />}
           {ticket.status === 'CLOSED' ? (
             <p className="rounded-md bg-muted p-3 text-sm">
               This Ticket is Closed, so it can&apos;t take new Messages. Set another status to reopen it.
@@ -132,8 +140,8 @@ export default function AdminTicketPage() {
           <InternalNoteBox key={`note-${ticket.id}`} ticketId={ticket.id} onChanged={reload} />
         </div>
         <aside className="flex flex-col gap-6">
-          <StatusControls ticketId={ticket.id} status={ticket.status} onChanged={reload} />
-          <TriageControls ticket={ticket} onChanged={reload} />
+          <StatusControls ticketId={ticket.id} status={ticket.status} updating={updating} onChanged={reload} />
+          <TriageControls ticket={ticket} updating={updating} onChanged={reload} />
           <BookCard book={book} />
           <RoyaltyCard royalty={royalty} />
         </aside>
@@ -205,7 +213,7 @@ function InternalNoteBox({ ticketId, onChanged }: { ticketId: string; onChanged:
         </p>
       )}
       <div>
-        <Button type="submit" variant="outline" disabled={saving}>
+        <Button type="submit" variant="outline" pending={saving}>
           {saving ? 'Adding…' : 'Add Internal Note'}
         </Button>
       </div>
@@ -216,14 +224,21 @@ function InternalNoteBox({ ticketId, onChanged }: { ticketId: string; onChanged:
 function StatusControls({
   ticketId,
   status,
+  updating,
   onChanged,
 }: {
   ticketId: string;
   status: TicketStatus;
+  updating: boolean;
   onChanged: () => void;
 }) {
   const { saving, error, run } = useTicketChange(onChanged);
-  const change = (next: TicketStatus) => run(() => setTicketStatus(ticketId, { status: next }));
+  // Which control started the change, so that only its spinner shows.
+  const [source, setSource] = useState<'RESOLVE' | 'CLOSE' | 'MENU' | null>(null);
+  const change = (next: TicketStatus, from: 'RESOLVE' | 'CLOSE' | 'MENU') => {
+    setSource(from);
+    return run(() => setTicketStatus(ticketId, { status: next }));
+  };
 
   return (
     <Card>
@@ -233,12 +248,23 @@ function StatusControls({
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-2">
           {status !== 'RESOLVED' && status !== 'CLOSED' && (
-            <Button size="sm" disabled={saving} onClick={() => change('RESOLVED')}>
+            <Button
+              size="sm"
+              disabled={saving || updating}
+              pending={saving && source === 'RESOLVE'}
+              onClick={() => change('RESOLVED', 'RESOLVE')}
+            >
               Mark Resolved
             </Button>
           )}
           {status !== 'CLOSED' && (
-            <Button size="sm" variant="outline" disabled={saving} onClick={() => change('CLOSED')}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={saving || updating}
+              pending={saving && source === 'CLOSE'}
+              onClick={() => change('CLOSED', 'CLOSE')}
+            >
               Close
             </Button>
           )}
@@ -251,8 +277,8 @@ function StatusControls({
             id="ticket-status"
             className="w-full"
             value={status}
-            disabled={saving}
-            onChange={(event) => change(ticketStatusSchema.parse(event.target.value))}
+            disabled={saving || updating}
+            onChange={(event) => change(ticketStatusSchema.parse(event.target.value), 'MENU')}
           >
             {ticketStatusSchema.options.map((option) => (
               <NativeSelectOption key={option} value={option}>
@@ -261,6 +287,7 @@ function StatusControls({
             ))}
           </NativeSelect>
         </div>
+        {saving && source === 'MENU' && <Loading label="Saving…" />}
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}
@@ -271,8 +298,22 @@ function StatusControls({
   );
 }
 
-function TriageControls({ ticket, onChanged }: { ticket: AdminQueueTicket; onChanged: () => void }) {
+function TriageControls({
+  ticket,
+  updating,
+  onChanged,
+}: {
+  ticket: AdminQueueTicket;
+  updating: boolean;
+  onChanged: () => void;
+}) {
   const { saving, error, run } = useTicketChange(onChanged);
+  // Which control started the change, so that only its spinner shows.
+  const [source, setSource] = useState<'RETRY' | 'FIELD' | null>(null);
+  const change = (from: 'RETRY' | 'FIELD', request: () => Promise<unknown>) => {
+    setSource(from);
+    return run(request);
+  };
 
   return (
     <Card>
@@ -281,9 +322,15 @@ function TriageControls({ ticket, onChanged }: { ticket: AdminQueueTicket; onCha
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {isUnclassified(ticket) && (
-          <div className="flex flex-col items-start gap-2 rounded-md bg-amber-50 p-3 text-sm dark:bg-amber-950/30">
+          <div className="flex flex-col items-start gap-2 rounded-md bg-note p-3 text-sm">
             <UnclassifiedNotice ticket={ticket} />
-            <Button size="sm" variant="outline" disabled={saving} onClick={() => run(() => retryClassification(ticket.id))}>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={saving || updating}
+              pending={saving && source === 'RETRY'}
+              onClick={() => change('RETRY', () => retryClassification(ticket.id))}
+            >
               Retry AI
             </Button>
           </div>
@@ -296,8 +343,8 @@ function TriageControls({ ticket, onChanged }: { ticket: AdminQueueTicket; onCha
           labels={CATEGORY_LABELS}
           source={ticket.categorySource}
           suggested={ticket.suggestedCategory}
-          disabled={saving}
-          onChange={(value) => run(() => setTicketCategory(ticket.id, { category: categorySchema.parse(value) }))}
+          disabled={saving || updating}
+          onChange={(value) => change('FIELD', () => setTicketCategory(ticket.id, { category: categorySchema.parse(value) }))}
         />
         <TriageField
           id="ticket-priority"
@@ -307,9 +354,10 @@ function TriageControls({ ticket, onChanged }: { ticket: AdminQueueTicket; onCha
           labels={PRIORITY_LABELS}
           source={ticket.prioritySource}
           suggested={ticket.suggestedPriority}
-          disabled={saving}
-          onChange={(value) => run(() => setTicketPriority(ticket.id, { priority: prioritySchema.parse(value) }))}
+          disabled={saving || updating}
+          onChange={(value) => change('FIELD', () => setTicketPriority(ticket.id, { priority: prioritySchema.parse(value) }))}
         />
+        {saving && source === 'FIELD' && <Loading label="Saving…" />}
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { TicketStatusBadge } from '@/components/ticket-status-badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loading } from '@/components/ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { getMyTickets } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
@@ -24,13 +25,13 @@ export default function MyTicketsPage() {
     return <p className="text-sm text-destructive">Could not load your Tickets. Please reload the page.</p>;
   }
   if (!tickets) {
-    return <p className="text-sm text-muted-foreground">Loading…</p>;
+    return <Loading label="Loading your Tickets…" />;
   }
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold">My Tickets</h1>
+        <h1>My Tickets</h1>
         {tickets.length > 0 && (
           <Link href={NEW_TICKET_PATH} className={buttonVariants()}>
             New Ticket
@@ -77,7 +78,7 @@ function TicketTable({ tickets }: { tickets: AuthorTicket[] }) {
           <TableRow key={ticket.id}>
             <TableCell className="font-medium">{ticket.reference}</TableCell>
             <TableCell className="max-w-xs truncate">
-              <Link href={`/tickets/${ticket.id}`} className="underline underline-offset-4">
+              <Link href={`/tickets/${ticket.id}`} className="text-link underline underline-offset-4">
                 {ticket.subject}
               </Link>
             </TableCell>

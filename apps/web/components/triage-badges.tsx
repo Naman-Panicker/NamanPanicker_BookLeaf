@@ -9,20 +9,21 @@ import {
 } from '@bookleaf/shared';
 import { Badge } from '@/components/ui/badge';
 
-const PRIORITY_VARIANTS = {
-  CRITICAL: 'destructive',
-  HIGH: 'default',
-  MEDIUM: 'secondary',
-  LOW: 'outline',
+// Standard signal colours rather than the brand's, because these carry meaning.
+const PRIORITY_COLOURS = {
+  CRITICAL: 'bg-red-600 text-white',
+  HIGH: 'bg-orange-100 text-orange-800',
+  MEDIUM: 'bg-yellow-100 text-yellow-800',
+  LOW: 'bg-green-100 text-green-800',
 } as const satisfies Record<Priority, string>;
 
 export function PriorityBadge({ priority }: { priority: Priority }) {
-  return <Badge variant={PRIORITY_VARIANTS[priority]}>{PRIORITY_LABELS[priority]}</Badge>;
+  return <Badge className={PRIORITY_COLOURS[priority]}>{PRIORITY_LABELS[priority]}</Badge>;
 }
 
 export function UnclassifiedBadge() {
   return (
-    <Badge variant="outline" className="border-amber-500 text-amber-700 dark:text-amber-400">
+    <Badge variant="outline" className="border-amber-500 bg-amber-50 text-amber-800">
       Unclassified
     </Badge>
   );

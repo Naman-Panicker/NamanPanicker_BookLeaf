@@ -55,25 +55,28 @@ export function MessageForm({ ticketId, label, body, onBodyChange, onSent, onCha
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2">
       <Label htmlFor={FIELD_ID}>{label}</Label>
       {notice}
-      <Textarea
-        id={FIELD_ID}
-        rows={4}
-        value={body}
-        onChange={(event) => onBodyChange(event.target.value)}
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? `${FIELD_ID}-error` : undefined}
-      />
+      <div className="flex flex-col gap-2 rounded-2xl border border-input p-2 transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring has-aria-invalid:border-destructive">
+        <Textarea
+          id={FIELD_ID}
+          rows={2}
+          className="min-h-14 border-0 px-2 py-1 focus-visible:ring-0 aria-invalid:ring-0 md:text-base"
+          value={body}
+          onChange={(event) => onBodyChange(event.target.value)}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${FIELD_ID}-error` : undefined}
+        />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {actions}
+          <Button type="submit" pending={sending}>
+            {sending ? 'Sending…' : 'Send'}
+          </Button>
+        </div>
+      </div>
       {error && (
         <p id={`${FIELD_ID}-error`} role="alert" className="text-sm text-destructive">
           {error}
         </p>
       )}
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" disabled={sending}>
-          {sending ? 'Sending…' : 'Send'}
-        </Button>
-        {actions}
-      </div>
     </form>
   );
 }

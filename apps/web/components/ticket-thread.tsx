@@ -9,7 +9,6 @@ import {
   type Role,
   type TicketEvent,
 } from '@bookleaf/shared';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatDateTime } from '@/lib/format';
 
 function statusChangeText({ before, after }: TicketEvent) {
@@ -71,7 +70,7 @@ type Props = {
 
 export function TicketThread({ messages, events, notes, nameOf }: Props) {
   return (
-    <ol className="flex flex-col gap-4">
+    <ol className="flex flex-col gap-6">
       {mergeTimeline({ messages, events, notes }).map((entry) => (
         <li key={entry.item.id}>
           {entry.type === 'message' && <MessageCard message={entry.item} sender={entry.item.senderName ?? nameOf(entry.item.sender)} />}
@@ -83,30 +82,43 @@ export function TicketThread({ messages, events, notes, nameOf }: Props) {
   );
 }
 
-function MessageCard({ message, sender }: { message: Message; sender: string }) {
+function MessageHeading({ sender, createdAt }: { sender: string; createdAt: string }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-          {sender}
-          <time dateTime={message.createdAt} className="text-xs font-normal text-muted-foreground">
-            {formatDateTime(message.createdAt)}
-          </time>
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm break-words whitespace-pre-wrap">{message.body}</p>
-      </CardContent>
-    </Card>
+    <p className="flex flex-wrap items-baseline gap-2 text-sm font-bold">
+      {sender}
+      <time dateTime={createdAt} className="text-xs font-normal text-muted-foreground">
+        {formatDateTime(createdAt)}
+      </time>
+    </p>
+  );
+}
+
+// Laid out like an LLM chat for both readers: the Author in bubbles, and BookLeaf as plain text.
+function MessageCard({ message, sender }: { message: Message; sender: string }) {
+  if (message.sender === 'AUTHOR') {
+    return (
+      <div className="flex flex-col items-end gap-1 pl-[10%]">
+        <MessageHeading sender={sender} createdAt={message.createdAt} />
+        <p className="max-w-full rounded-2xl bg-secondary px-4 py-2.5 text-base break-words whitespace-pre-wrap">
+          {message.body}
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      <MessageHeading sender={sender} createdAt={message.createdAt} />
+      <p className="text-base break-words whitespace-pre-wrap">{message.body}</p>
+    </div>
   );
 }
 
 // Shared with the Internal Note box, so nobody takes either for a Message.
 export const INTERNAL_PANEL_CLASS =
-  'flex flex-col gap-2 rounded-xl border border-dashed border-amber-400 bg-amber-50 p-4 dark:border-amber-700 dark:bg-amber-950/30';
+  'flex flex-col gap-2 rounded-xl border border-dashed border-note-border bg-note p-4';
 
 export function InternalLabel() {
-  return <p className="text-xs font-semibold text-amber-900 dark:text-amber-200">Internal, not visible to the Author</p>;
+  return <p className="text-xs font-bold">Internal, not visible to the Author</p>;
 }
 
 function InternalNoteCard({ note }: { note: InternalNote }) {

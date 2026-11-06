@@ -3,6 +3,7 @@
 import { loginRequestSchema } from '@bookleaf/shared';
 import { useRouter } from 'next/navigation';
 import { type FormEvent, useEffect, useState } from 'react';
+import { BookLeafLogo } from '@/components/bookleaf-logo';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -59,9 +60,10 @@ export default function SignInPage() {
   }
 
   return (
-    <main className="flex min-h-svh items-center justify-center p-6">
+    <main className="flex min-h-svh flex-col items-center justify-center gap-4 bg-secondary p-6">
       <Card className="w-full max-w-sm">
         <CardHeader>
+          <BookLeafLogo className="mb-2 h-12 w-auto" />
           <CardTitle>Sign in to BookLeaf</CardTitle>
           <CardDescription>Use the email and password for your account.</CardDescription>
         </CardHeader>
@@ -80,12 +82,19 @@ export default function SignInPage() {
                 {formError}
               </p>
             )}
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" pending={submitting}>
               {submitting ? 'Signing in…' : 'Sign in'}
             </Button>
           </form>
         </CardContent>
       </Card>
+      <p className="text-center text-sm text-muted-foreground">
+        A demo created by Naman Panicker (
+        <a href="mailto:namanpanicker02@gmail.com" className="text-link underline underline-offset-4">
+          namanpanicker02@gmail.com
+        </a>
+        )
+      </p>
     </main>
   );
 }

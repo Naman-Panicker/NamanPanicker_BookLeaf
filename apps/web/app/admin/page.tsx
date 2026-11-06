@@ -19,12 +19,12 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { type ReactNode, Suspense, useEffect, useState } from 'react';
 import { TicketStatusBadge } from '@/components/ticket-status-badge';
 import { CategoryTriage, PriorityTriage } from '@/components/triage-badges';
-import { Badge } from '@/components/ui/badge';
 import { buttonVariants } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { Loading } from '@/components/ui/spinner';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { type QueueFilters, readQueueFilters, toQueueQuery } from '@/lib/admin-queue-filters';
 import { getAdminQueue } from '@/lib/api';
@@ -34,11 +34,11 @@ import { cn } from '@/lib/utils';
 const QUEUE_PATH = '/admin';
 
 // The moment it loaded is what the wait badges count up to, until live updates arrive.
-type LoadedQueue = { tickets: AdminQueueTicket[]; loadedAt: Date };
+type LoadedQueue = { tickets: AdminQueueTicket[]; loadedAt: Date; search: string };
 
 export default function AdminQueuePage() {
   return (
-    <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+    <Suspense fallback={<Loading label="Loading the queue…" />}>
       <AdminQueue />
     </Suspense>
   );
@@ -59,7 +59,7 @@ function AdminQueue() {
     getAdminQueue(toQueueQuery(readQueueFilters(new URLSearchParams(search)))).then(
       (tickets) => {
         if (superseded) return;
-        setQueue({ tickets, loadedAt: new Date() });
+        setQueue({ tickets, loadedAt: new Date(), search });
         setLoadFailed(false);
       },
       () => {
@@ -80,9 +80,12 @@ function AdminQueue() {
 
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
-      <h1 className="text-xl font-semibold">Ticket queue</h1>
+      <div className="flex items-center gap-4">
+        <h1>Ticket queue</h1>
+        {queue && !loadFailed && queue.search !== search && <Loading label="Updating…" />}
+      </div>
       <FilterBar filters={filters} hasFilters={hasFilters} onChange={changeFilter} />
-      <QueueResults queue={queue} loadFailed={loadFailed} hasFilters={hasFilters} />
+      <QueueResults queue={queue} loadFailed={loadFailed} hasFilters={hasFilters} stale={queue?.search !== search} />
     </div>
   );
 }
@@ -91,21 +94,25 @@ function QueueResults({
   queue,
   loadFailed,
   hasFilters,
+  stale,
 }: {
   queue: LoadedQueue | null;
   loadFailed: boolean;
   hasFilters: boolean;
+  // These results are for filters that have since changed.
+  stale: boolean;
 }) {
   if (loadFailed) {
     return <p className="text-sm text-destructive">Could not load the queue. Please reload the page.</p>;
   }
   if (!queue) {
-    return <p className="text-sm text-muted-foreground">Loading…</p>;
+    return <Loading label="Loading the queue…" />;
   }
-  if (queue.tickets.length === 0) {
-    return <EmptyState hasFilters={hasFilters} />;
-  }
-  return <QueueTable queue={queue} />;
+  return (
+    <div className={cn('transition-opacity', stale && 'opacity-50')}>
+      {queue.tickets.length === 0 ? <EmptyState hasFilters={hasFilters} /> : <QueueTable queue={queue} />}
+    </div>
+  );
 }
 
 function FilterField({ label, htmlFor, children }: { label: string; htmlFor: string; children: ReactNode }) {
@@ -248,9 +255,9 @@ function QueueTable({ queue: { tickets, loadedAt } }: { queue: LoadedQueue }) {
 
 function QueueRow({ ticket, loadedAt }: { ticket: AdminQueueTicket; loadedAt: Date }) {
   return (
-    <TableRow className={cn(isUnclassified(ticket) && 'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30')}>
+    <TableRow className={cn(isUnclassified(ticket) && 'bg-note hover:bg-note')}>
       <TableCell className="max-w-md whitespace-normal">
-        <Link href={`/admin/tickets/${ticket.id}`} className="font-medium break-words underline underline-offset-4">
+        <Link href={`/admin/tickets/${ticket.id}`} className="font-medium break-words text-link underline underline-offset-4">
           {ticket.subject}
         </Link>
         <p className="mt-1 text-xs break-words text-muted-foreground">
@@ -279,11 +286,11 @@ function QueueRow({ ticket, loadedAt }: { ticket: AdminQueueTicket; loadedAt: Da
 function WaitingCell({ ticket, loadedAt }: { ticket: AdminQueueTicket; loadedAt: Date }) {
   if (!isUnresolved(ticket.status)) return <span className="text-muted-foreground">—</span>;
   return (
-    <div className="flex flex-col gap-1">
-      <Badge variant={ticket.awaitingAdmin ? 'secondary' : 'outline'}>
+    <div className="flex flex-col gap-0.5">
+      {ticket.awaitingAdmin && <span className="font-bold">Awaiting Admin</span>}
+      <span className={cn(!ticket.awaitingAdmin && 'text-muted-foreground')}>
         {waitingLabel(new Date(ticket.waitingSince), loadedAt)}
-      </Badge>
-      {ticket.awaitingAdmin && <Badge>Awaiting Admin</Badge>}
+      </span>
     </div>
   );
 }
