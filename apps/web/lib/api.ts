@@ -160,6 +160,16 @@ export async function getTicketEvents(ticketId: string) {
   return ticketEventsResponseSchema.parse(await res.json()).events;
 }
 
+export async function assignTicketToMe(ticketId: string) {
+  const res = await authenticated(`/api/admin/tickets/${encodeURIComponent(ticketId)}/assignee`, { method: 'PUT' });
+  return adminTicketResponseSchema.parse(await res.json()).ticket;
+}
+
+export async function unassignTicket(ticketId: string) {
+  const res = await authenticated(`/api/admin/tickets/${encodeURIComponent(ticketId)}/assignee`, { method: 'DELETE' });
+  return adminTicketResponseSchema.parse(await res.json()).ticket;
+}
+
 export async function getInternalNotes(ticketId: string) {
   const res = await authenticated(`/api/admin/tickets/${encodeURIComponent(ticketId)}/internal-notes`);
   return internalNotesResponseSchema.parse(await res.json()).notes;

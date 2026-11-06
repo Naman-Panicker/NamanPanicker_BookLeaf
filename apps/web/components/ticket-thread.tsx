@@ -42,9 +42,9 @@ function eventText(event: TicketEvent) {
     case 'PRIORITY_OVERRIDDEN':
       return overrideText('Priority', priorityLabel(event.before), priorityLabel(event.after));
     case 'ASSIGNED':
-      return 'assigned this Ticket';
+      return 'assigned this Ticket to themselves';
     case 'UNASSIGNED':
-      return 'unassigned this Ticket';
+      return 'unassigned themselves from this Ticket';
     case 'TAKEOVER_REQUESTED':
       return 'requested a Takeover of this Ticket';
     case 'TAKEOVER_ACCEPTED':

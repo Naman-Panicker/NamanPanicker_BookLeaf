@@ -29,6 +29,7 @@ import { notFound, useParams } from 'next/navigation';
 import { type FormEvent, useCallback, useState } from 'react';
 import { Figure } from '@/components/figure';
 import { DraftEditor } from '@/components/draft-editor';
+import { useCurrentUser } from '@/components/signed-in-shell';
 import { TicketStatusBadge } from '@/components/ticket-status-badge';
 import { INTERNAL_PANEL_CLASS, InternalLabel, TicketThread } from '@/components/ticket-thread';
 import { CategoryTriage, PriorityTriage } from '@/components/triage-badges';
@@ -42,6 +43,7 @@ import {
   actionErrorMessage,
   addInternalNote,
   ApiRequestError,
+  assignTicketToMe,
   getAdminWorkspace,
   getInternalNotes,
   getTicketEvents,
@@ -50,6 +52,7 @@ import {
   setTicketCategory,
   setTicketPriority,
   setTicketStatus,
+  unassignTicket,
 } from '@/lib/api';
 import { formatCount, formatDate, formatDay, formatRupees } from '@/lib/format';
 import { useLiveData } from '@/lib/use-live-data';
@@ -122,6 +125,7 @@ export default function AdminTicketPage() {
           <InternalNoteBox key={`note-${ticket.id}`} ticketId={ticket.id} onChanged={reload} />
         </div>
         <aside className="flex flex-col gap-6">
+          <AssigneeControls ticket={ticket} updating={updating} onChanged={reload} />
           <StatusControls ticketId={ticket.id} status={ticket.status} updating={updating} onChanged={reload} />
           <TriageControls ticket={ticket} updating={updating} onChanged={reload} />
           <BookCard book={book} />
@@ -200,6 +204,62 @@ function InternalNoteBox({ ticketId, onChanged }: { ticketId: string; onChanged:
         </Button>
       </div>
     </form>
+  );
+}
+
+function AssigneeControls({
+  ticket,
+  updating,
+  onChanged,
+}: {
+  ticket: AdminQueueTicket;
+  updating: boolean;
+  onChanged: () => void;
+}) {
+  const { id: currentAdminId } = useCurrentUser();
+  const { saving, error, run } = useTicketChange(onChanged);
+  const { assignee } = ticket;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Assignee</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col items-start gap-3">
+        {assignee === null && (
+          <>
+            <p className="text-sm text-muted-foreground">Nobody holds this Ticket yet.</p>
+            <Button size="sm" disabled={updating} pending={saving} onClick={() => run(() => assignTicketToMe(ticket.id))}>
+              Assign to me
+            </Button>
+          </>
+        )}
+        {assignee?.id === currentAdminId && (
+          <>
+            <p className="text-sm">This Ticket is assigned to you.</p>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={updating}
+              pending={saving}
+              onClick={() => run(() => unassignTicket(ticket.id))}
+            >
+              Unassign
+            </Button>
+          </>
+        )}
+        {assignee && assignee.id !== currentAdminId && (
+          <p className="text-sm break-words">
+            {assignee.name} holds this Ticket. They can unassign it if someone else should take it.
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

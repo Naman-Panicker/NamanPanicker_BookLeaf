@@ -34,7 +34,7 @@ import type { Drafts } from '../drafts';
 import type { Prisma } from '../generated/prisma/client';
 import { notFound } from '../http/errors';
 import type { createRoutes } from '../http/routes';
-import { changeStatus } from '../ticket-lifecycle';
+import { assignToSelf, changeStatus, unassignSelf } from '../ticket-lifecycle';
 import { toBook } from './books';
 
 type Deps = {
@@ -203,6 +203,46 @@ export function addAdminTicketRoutes({ routes, prisma, clock, classifier, drafts
         type: 'SET_STATUS',
         status: body.status,
       });
+      res.json(await adminTicket(params.ticketId));
+    },
+  );
+
+  routes.add(
+    {
+      method: 'put',
+      path: '/api/admin/tickets/:ticketId/assignee',
+      summary: 'Assign a Ticket to the current Admin, which moves an Open Ticket to In Progress',
+      tag: 'Admin',
+      adminOnly: true,
+      params: ticketParamsSchema,
+      responses: {
+        200: { description: 'The Ticket.', schema: adminTicketResponseSchema },
+        404: { description: 'The Ticket does not exist, or the caller is not an Admin.', schema: apiErrorSchema },
+        409: { description: 'Another Admin holds the Ticket, or it has just changed.', schema: apiErrorSchema },
+      },
+    },
+    async (_req, res, { params }) => {
+      await assignToSelf({ prisma, clock }, currentSession(res), params.ticketId);
+      res.json(await adminTicket(params.ticketId));
+    },
+  );
+
+  routes.add(
+    {
+      method: 'delete',
+      path: '/api/admin/tickets/:ticketId/assignee',
+      summary: 'Unassign the current Admin from a Ticket they hold',
+      tag: 'Admin',
+      adminOnly: true,
+      params: ticketParamsSchema,
+      responses: {
+        200: { description: 'The Ticket.', schema: adminTicketResponseSchema },
+        404: { description: 'The Ticket does not exist, or the caller is not an Admin.', schema: apiErrorSchema },
+        409: { description: 'Another Admin holds the Ticket, or it has just changed.', schema: apiErrorSchema },
+      },
+    },
+    async (_req, res, { params }) => {
+      await unassignSelf({ prisma, clock }, currentSession(res), params.ticketId);
       res.json(await adminTicket(params.ticketId));
     },
   );

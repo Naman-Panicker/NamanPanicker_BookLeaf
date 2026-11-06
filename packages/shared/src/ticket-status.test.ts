@@ -52,6 +52,21 @@ describe('confirming a resolution', () => {
   );
 });
 
+describe('assigning a Ticket', () => {
+  it.each([
+    ['OPEN', 'IN_PROGRESS'],
+    ['IN_PROGRESS', 'IN_PROGRESS'],
+    ['RESOLVED', 'RESOLVED'],
+    ['CLOSED', 'CLOSED'],
+  ] as const)('assigning a Ticket that is %s leaves it %s', (status, next) => {
+    expect(nextTicketStatus(status, 'ADMIN', { type: 'ASSIGN' })).toEqual({ ok: true, status: next });
+  });
+
+  it('rejects an Author', () => {
+    expect(nextTicketStatus('OPEN', 'AUTHOR', { type: 'ASSIGN' })).toEqual({ ok: false, rejection: 'ROLE_NOT_ALLOWED' });
+  });
+});
+
 describe('setting a status by hand', () => {
   const statuses = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'] as const;
   const everyPair = statuses.flatMap((from) => statuses.map((to) => [from, to] as const));

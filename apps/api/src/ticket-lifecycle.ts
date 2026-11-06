@@ -119,6 +119,49 @@ export async function sendMessage({ prisma, clock }: Deps, actor: Session, ticke
   throw ticketJustChanged();
 }
 
+export async function assignToSelf({ prisma, clock }: Deps, admin: Session, ticketId: string) {
+  const ticket = await prisma.ticket.findUnique({
+    where: { id: ticketId },
+    select: { status: true, assignee: { select: { id: true, name: true } } },
+  });
+  if (!ticket) throw notFound();
+  const { status, assignee } = ticket;
+  if (assignee?.id === admin.id) return;
+  if (assignee) throw conflict(`This Ticket is already assigned to ${assignee.name}.`);
+  const outcome = nextTicketStatus(status, admin.role, { type: 'ASSIGN' });
+  if (!outcome.ok) throw REJECTIONS[outcome.rejection]();
+
+  const now = clock.now();
+  await prisma.$transaction(async (tx) => {
+    const { count } = await tx.ticket.updateMany({
+      where: { id: ticketId, assigneeId: null },
+      data: { assigneeId: admin.id },
+    });
+    if (count === 0) throw ticketJustChanged();
+    await tx.ticketEvent.create({ data: { ticketId, kind: 'ASSIGNED', adminId: admin.id, createdAt: now } });
+    // Who holds a Ticket is Admin-only, so the Author's Last update only moves if the status does.
+    if (status === outcome.status) return;
+    if (!(await recordMove(tx, admin, ticketId, { from: status, to: outcome.status }, now))) throw ticketJustChanged();
+  });
+}
+
+export async function unassignSelf({ prisma, clock }: Deps, admin: Session, ticketId: string) {
+  const ticket = await prisma.ticket.findUnique({ where: { id: ticketId }, select: { assigneeId: true } });
+  if (!ticket) throw notFound();
+  if (ticket.assigneeId === null) return;
+  if (ticket.assigneeId !== admin.id) throw conflict('Only the Assignee can unassign this Ticket.');
+
+  const now = clock.now();
+  await prisma.$transaction(async (tx) => {
+    const { count } = await tx.ticket.updateMany({
+      where: { id: ticketId, assigneeId: admin.id },
+      data: { assigneeId: null },
+    });
+    if (count === 0) throw ticketJustChanged();
+    await tx.ticketEvent.create({ data: { ticketId, kind: 'UNASSIGNED', adminId: admin.id, createdAt: now } });
+  });
+}
+
 export async function changeStatus({ prisma, clock }: Deps, actor: Session, ticketId: string, action: TicketAction) {
   const move = await decideMove(prisma, actor, ticketId, action);
   // Setting the status a Ticket already has changes nothing, so there's nothing to record.

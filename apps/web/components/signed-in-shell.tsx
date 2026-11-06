@@ -3,7 +3,7 @@
 import type { Role, SessionUser } from '@bookleaf/shared';
 import Link from 'next/link';
 import { notFound, usePathname } from 'next/navigation';
-import { type ReactNode, useEffect, useState } from 'react';
+import { createContext, type ReactNode, use, useEffect, useState } from 'react';
 import { BookLeafLogo } from '@/components/bookleaf-logo';
 import { Button } from '@/components/ui/button';
 import { Loading } from '@/components/ui/spinner';
@@ -36,6 +36,15 @@ function AuthorNav() {
       ))}
     </nav>
   );
+}
+
+const CurrentUserContext = createContext<SessionUser | null>(null);
+
+// For pages inside the shell, which only shows them once it knows who is signed in.
+export function useCurrentUser() {
+  const user = use(CurrentUserContext);
+  if (!user) throw new Error('useCurrentUser must be used inside SignedInShell.');
+  return user;
 }
 
 // The frame around every signed-in page. Being logged out sends the browser to sign-in,
@@ -91,7 +100,7 @@ export function SignedInShell({ role, children }: Props) {
         </div>
       </header>
       <main id="main-content" className="p-6">
-        {children}
+        <CurrentUserContext value={user}>{children}</CurrentUserContext>
       </main>
     </div>
   );

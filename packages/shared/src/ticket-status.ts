@@ -4,6 +4,7 @@ import type { TicketStatus } from './tickets';
 export type TicketAction =
   | { type: 'SEND_MESSAGE' }
   | { type: 'CONFIRM_RESOLUTION' }
+  | { type: 'ASSIGN' }
   | { type: 'SET_STATUS'; status: TicketStatus };
 
 export type TransitionRejection = 'TICKET_CLOSED' | 'NOT_RESOLVED' | 'ROLE_NOT_ALLOWED';
@@ -30,12 +31,19 @@ function afterConfirmation(status: TicketStatus, role: Role) {
   return status === 'RESOLVED' ? moveTo('CLOSED') : reject('NOT_RESOLVED');
 }
 
+function afterAssignment(status: TicketStatus, role: Role) {
+  if (role !== 'ADMIN') return reject('ROLE_NOT_ALLOWED');
+  return moveTo(status === 'OPEN' ? 'IN_PROGRESS' : status);
+}
+
 export function nextTicketStatus(status: TicketStatus, role: Role, action: TicketAction): TransitionResult {
   switch (action.type) {
     case 'SEND_MESSAGE':
       return afterMessage(status, role);
     case 'CONFIRM_RESOLUTION':
       return afterConfirmation(status, role);
+    case 'ASSIGN':
+      return afterAssignment(status, role);
     case 'SET_STATUS':
       return role === 'ADMIN' ? moveTo(action.status) : reject('ROLE_NOT_ALLOWED');
   }
