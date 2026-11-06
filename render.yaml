@@ -6,8 +6,10 @@ services:
     region: ohio
     plan: free
     # NODE_ENV=production would make pnpm skip devDependencies, and the build needs tsup.
-    buildCommand: corepack enable && NODE_ENV=development pnpm install --frozen-lockfile && pnpm --filter @bookleaf/api build && pnpm --filter @bookleaf/api db:migrate
-    startCommand: pnpm --filter @bookleaf/api start
+    # `corepack pnpm` runs the version pinned in package.json, not the one Render preinstalls.
+    buildCommand: NODE_ENV=development corepack pnpm install --frozen-lockfile && corepack pnpm --filter @bookleaf/api build && corepack pnpm --filter @bookleaf/api db:migrate
+    # tsup bundles the workspace code, so running the server needs node and not pnpm.
+    startCommand: node apps/api/dist/server.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
