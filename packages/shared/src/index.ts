@@ -6,7 +6,6 @@ export * from './production-stage';
 export * from './queue-ordering';
 export * from './royalty';
 export * from './session';
-export * from './spike';
 export * from './ticket-status';
 export * from './tickets';
 export * from './timeline';
