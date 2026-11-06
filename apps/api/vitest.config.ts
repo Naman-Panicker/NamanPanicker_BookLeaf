@@ -13,8 +13,9 @@ export default defineProject({
     setupFiles: ['./src/testing/reset-between-files.ts'],
     // All test files share one database, and each one starts by resetting it.
     fileParallelism: false,
-    // Every query crosses the network to Neon, and seeding alone makes dozens of them.
-    testTimeout: 30_000,
-    hookTimeout: 30_000,
+    // Every query crosses the network to Neon, and seeding alone makes dozens of them. On a slow
+    // connection a query takes 500ms and a new connection 5s, so a tighter limit fails at random.
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
   },
 });
