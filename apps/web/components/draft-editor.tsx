@@ -9,6 +9,7 @@ import { ApiRequestError, getTicketDraft, regenerateTicketDraft } from '@/lib/ap
 
 type Props = {
   ticketId: string;
+  latestAuthorMessageId: string | undefined;
   onChanged: () => void;
 };
 
@@ -28,8 +29,10 @@ function withDraftResponse(editor: Editor, { draft, draftUnavailable }: TicketDr
   return editor.body === bodyWhenAsked ? { body: draft, aiWritten: true, status: 'READY' } : { ...editor, status: 'READY' };
 }
 
-export function DraftEditor({ ticketId, onChanged }: Props) {
+export function DraftEditor({ ticketId, latestAuthorMessageId, onChanged }: Props) {
   const [editor, setEditor] = useState<Editor>({ body: '', aiWritten: false, status: 'WRITING' });
+  // The Author Message this box last caught up with. A newer one can arrive while it's open.
+  const [caughtUpWith, setCaughtUpWith] = useState(latestAuthorMessageId);
   // Only the latest request counts, and sending a Message makes any request still running out of date.
   const latestRequest = useRef(0);
 
@@ -55,6 +58,7 @@ export function DraftEditor({ ticketId, onChanged }: Props) {
   function regenerate() {
     const ownText = editor.body !== '' && !editor.aiWritten;
     if (ownText && !window.confirm('Replace what you have written with a new Draft?')) return;
+    setCaughtUpWith(latestAuthorMessageId);
     setEditor((current) => ({ ...current, status: 'WRITING' }));
     requestDraft(
       () =>
@@ -69,6 +73,7 @@ export function DraftEditor({ ticketId, onChanged }: Props) {
 
   function handleSent() {
     latestRequest.current += 1;
+    setCaughtUpWith(latestAuthorMessageId);
     setEditor({ body: '', aiWritten: false, status: 'NOTHING_TO_ANSWER' });
   }
 
@@ -80,7 +85,7 @@ export function DraftEditor({ ticketId, onChanged }: Props) {
       onBodyChange={(body) => setEditor((current) => ({ ...current, body, aiWritten: false }))}
       onSent={handleSent}
       onChanged={onChanged}
-      notice={<DraftNotice editor={editor} />}
+      notice={<DraftNotice editor={editor} authorHasWritten={caughtUpWith !== latestAuthorMessageId} />}
       actions={
         <Button type="button" variant="outline" disabled={editor.status === 'WRITING'} onClick={regenerate}>
           {editor.status === 'NOTHING_TO_ANSWER' ? 'Write a Draft' : 'Regenerate'}
@@ -90,15 +95,26 @@ export function DraftEditor({ ticketId, onChanged }: Props) {
   );
 }
 
-function DraftNotice({ editor: { aiWritten, status } }: { editor: Editor }) {
+function DraftNotice({
+  editor: { aiWritten, status },
+  authorHasWritten,
+}: {
+  editor: Editor;
+  authorHasWritten: boolean;
+}) {
   return (
     <>
+      {authorHasWritten && status !== 'WRITING' && (
+        <p role="status" className="rounded-md bg-note p-2 text-sm">
+          The Author has sent a new Message, shown above. Ask the AI for a new Draft to answer it.
+        </p>
+      )}
       {status === 'WRITING' && (
         <div role="status">
           <Loading label="Writing a Draft…" />
         </div>
       )}
-      {status === 'NOTHING_TO_ANSWER' && (
+      {status === 'NOTHING_TO_ANSWER' && !authorHasWritten && (
         <p role="status" className="text-sm text-muted-foreground">
           BookLeaf sent the latest Message, so there&apos;s no Draft yet. You can still write a follow-up, or ask the AI for one.
         </p>

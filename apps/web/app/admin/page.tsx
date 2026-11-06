@@ -16,7 +16,7 @@ import {
 } from '@bookleaf/shared';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { type ReactNode, Suspense, useEffect, useState } from 'react';
+import { type ReactNode, Suspense, useCallback } from 'react';
 import { TicketStatusBadge } from '@/components/ticket-status-badge';
 import { CategoryTriage, PriorityTriage } from '@/components/triage-badges';
 import { buttonVariants } from '@/components/ui/button';
@@ -29,11 +29,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { type QueueFilters, readQueueFilters, toQueueQuery } from '@/lib/admin-queue-filters';
 import { getAdminQueue } from '@/lib/api';
 import { formatDay } from '@/lib/format';
+import { useLiveData } from '@/lib/use-live-data';
 import { cn } from '@/lib/utils';
 
 const QUEUE_PATH = '/admin';
 
-// The moment it loaded is what the wait badges count up to, until live updates arrive.
+// The moment it loaded is what the wait badges count up to.
 type LoadedQueue = { tickets: AdminQueueTicket[]; loadedAt: Date; search: string };
 
 export default function AdminQueuePage() {
@@ -50,26 +51,11 @@ function AdminQueue() {
   const filters = readQueueFilters(new URLSearchParams(search));
   // Counts what was understood, so a mangled URL doesn't claim that filters hid everything.
   const hasFilters = Object.values(filters).some((value) => value !== undefined);
-  const [queue, setQueue] = useState<LoadedQueue | null>(null);
-  const [loadFailed, setLoadFailed] = useState(false);
-
-  useEffect(() => {
-    // Filters can change faster than the API answers, and only the latest answer counts.
-    let superseded = false;
-    getAdminQueue(toQueueQuery(readQueueFilters(new URLSearchParams(search)))).then(
-      (tickets) => {
-        if (superseded) return;
-        setQueue({ tickets, loadedAt: new Date(), search });
-        setLoadFailed(false);
-      },
-      () => {
-        if (!superseded) setLoadFailed(true);
-      },
-    );
-    return () => {
-      superseded = true;
-    };
+  const load = useCallback(async (): Promise<LoadedQueue> => {
+    const tickets = await getAdminQueue(toQueueQuery(readQueueFilters(new URLSearchParams(search))));
+    return { tickets, loadedAt: new Date(), search };
   }, [search]);
+  const { data: queue, loadFailed } = useLiveData(load);
 
   function changeFilter(name: keyof QueueFilters, value: string) {
     const next = new URLSearchParams(search);

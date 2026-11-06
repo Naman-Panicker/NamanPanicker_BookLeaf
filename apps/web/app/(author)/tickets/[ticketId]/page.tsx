@@ -9,7 +9,7 @@ import {
 } from '@bookleaf/shared';
 import Link from 'next/link';
 import { notFound, useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { MessageEditor } from '@/components/message-editor';
 import { TicketStatusBadge } from '@/components/ticket-status-badge';
 import { TicketThread } from '@/components/ticket-thread';
@@ -24,8 +24,9 @@ import {
   getTicketEvents,
   getTicketMessages,
 } from '@/lib/api';
+import { useLiveData } from '@/lib/use-live-data';
 
-type Thread = { ticket: AuthorTicket; messages: Message[]; events: TicketEvent[]; loadedVersion: number };
+type Thread = { ticket: AuthorTicket; messages: Message[]; events: TicketEvent[] };
 
 function nameOf(side: Role) {
   return side === 'AUTHOR' ? 'You' : 'BookLeaf';
@@ -33,29 +34,15 @@ function nameOf(side: Role) {
 
 export default function TicketThreadPage() {
   const { ticketId } = useParams<{ ticketId: string }>();
-  const [thread, setThread] = useState<Thread | null>(null);
-  const [missing, setMissing] = useState(false);
-  const [loadFailed, setLoadFailed] = useState(false);
-  // Going up reloads the thread, until live updates arrive.
-  const [version, setVersion] = useState(0);
-
-  useEffect(() => {
-    // A slow answer must not overwrite the one from a later reload.
-    let superseded = false;
-    Promise.all([getTicket(ticketId), getTicketMessages(ticketId), getTicketEvents(ticketId)]).then(
-      ([ticket, messages, events]) => {
-        if (!superseded) setThread({ ticket, messages, events, loadedVersion: version });
-      },
-      (error: unknown) => {
-        if (superseded) return;
-        if (error instanceof ApiRequestError && error.status === 404) setMissing(true);
-        else setLoadFailed(true);
-      },
-    );
-    return () => {
-      superseded = true;
-    };
-  }, [ticketId, version]);
+  const load = useCallback(async (): Promise<Thread> => {
+    const [ticket, messages, events] = await Promise.all([
+      getTicket(ticketId),
+      getTicketMessages(ticketId),
+      getTicketEvents(ticketId),
+    ]);
+    return { ticket, messages, events };
+  }, [ticketId]);
+  const { data: thread, updating, loadFailed, missing, reload } = useLiveData(load);
 
   if (missing) notFound();
   if (loadFailed) {
@@ -65,8 +52,7 @@ export default function TicketThreadPage() {
     return <Loading label="Loading this Ticket…" />;
   }
 
-  const { ticket, messages, events, loadedVersion } = thread;
-  const reload = () => setVersion((current) => current + 1);
+  const { ticket, messages, events } = thread;
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       <Link href="/tickets" className="text-sm text-link underline underline-offset-4">
@@ -80,7 +66,7 @@ export default function TicketThreadPage() {
         <TicketStatusBadge status={ticket.status} />
       </div>
       <TicketThread messages={messages} events={events} nameOf={nameOf} />
-      {loadedVersion !== version && <Loading label="Updating…" />}
+      {updating && <Loading label="Updating…" />}
       {ticket.status === 'CLOSED' ? (
         <ClosedHint />
       ) : (

@@ -26,7 +26,7 @@ import {
 } from '@bookleaf/shared';
 import Link from 'next/link';
 import { notFound, useParams } from 'next/navigation';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useCallback, useState } from 'react';
 import { Figure } from '@/components/figure';
 import { DraftEditor } from '@/components/draft-editor';
 import { TicketStatusBadge } from '@/components/ticket-status-badge';
@@ -52,44 +52,22 @@ import {
   setTicketStatus,
 } from '@/lib/api';
 import { formatCount, formatDate, formatDay, formatRupees } from '@/lib/format';
+import { useLiveData } from '@/lib/use-live-data';
 
-type Workspace = AdminWorkspaceResponse & {
-  messages: Message[];
-  events: TicketEvent[];
-  notes: InternalNote[];
-  loadedVersion: number;
-};
+type Workspace = AdminWorkspaceResponse & { messages: Message[]; events: TicketEvent[]; notes: InternalNote[] };
 
 export default function AdminTicketPage() {
   const { ticketId } = useParams<{ ticketId: string }>();
-  const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [missing, setMissing] = useState(false);
-  const [loadFailed, setLoadFailed] = useState(false);
-  // Going up reloads the workspace, until live updates arrive.
-  const [version, setVersion] = useState(0);
-
-  useEffect(() => {
-    // A slow answer must not overwrite the one from a later reload.
-    let superseded = false;
-    Promise.all([
+  const load = useCallback(async (): Promise<Workspace> => {
+    const [facts, messages, events, notes] = await Promise.all([
       getAdminWorkspace(ticketId),
       getTicketMessages(ticketId),
       getTicketEvents(ticketId),
       getInternalNotes(ticketId),
-    ]).then(
-      ([facts, messages, events, notes]) => {
-        if (!superseded) setWorkspace({ ...facts, messages, events, notes, loadedVersion: version });
-      },
-      (error: unknown) => {
-        if (superseded) return;
-        if (error instanceof ApiRequestError && error.status === 404) setMissing(true);
-        else setLoadFailed(true);
-      },
-    );
-    return () => {
-      superseded = true;
-    };
-  }, [ticketId, version]);
+    ]);
+    return { ...facts, messages, events, notes };
+  }, [ticketId]);
+  const { data: workspace, updating, loadFailed, missing, reload } = useLiveData(load);
 
   if (missing) notFound();
   if (loadFailed) {
@@ -99,9 +77,8 @@ export default function AdminTicketPage() {
     return <Loading label="Loading this Ticket…" />;
   }
 
-  const { ticket, book, royalty, messages, events, notes, loadedVersion } = workspace;
-  const updating = loadedVersion !== version;
-  const reload = () => setVersion((current) => current + 1);
+  const { ticket, book, royalty, messages, events, notes } = workspace;
+  const latestAuthorMessageId = messages.findLast(({ sender }) => sender === 'AUTHOR')?.id;
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
       <Link href="/admin" className="text-sm text-link underline underline-offset-4">
@@ -135,7 +112,12 @@ export default function AdminTicketPage() {
               This Ticket is Closed, so it can&apos;t take new Messages. Set another status to reopen it.
             </p>
           ) : (
-            <DraftEditor key={ticket.id} ticketId={ticket.id} onChanged={reload} />
+            <DraftEditor
+              key={ticket.id}
+              ticketId={ticket.id}
+              latestAuthorMessageId={latestAuthorMessageId}
+              onChanged={reload}
+            />
           )}
           <InternalNoteBox key={`note-${ticket.id}`} ticketId={ticket.id} onChanged={reload} />
         </div>
@@ -370,7 +352,7 @@ function TriageControls({
 
 function UnclassifiedNotice({ ticket }: { ticket: AdminQueueTicket }) {
   if (ticket.classificationAttempts < MAX_CLASSIFICATION_ATTEMPTS) {
-    return <p>The AI hasn&apos;t classified this Ticket yet. Reload to see its result, or classify it by hand.</p>;
+    return <p>The AI hasn&apos;t classified this Ticket yet. Its result will appear here, or you can classify it by hand.</p>;
   }
   return (
     <>
