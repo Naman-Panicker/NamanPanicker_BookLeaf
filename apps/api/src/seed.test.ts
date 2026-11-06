@@ -1,4 +1,4 @@
-import type { AdminQueueTicket } from '@bookleaf/shared';
+import type { AdminQueueTicket, InternalNote, Message } from '@bookleaf/shared';
 import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import sampleData from '../prisma/sample-data.json';
@@ -161,6 +161,92 @@ describe('seeding', () => {
       const rows = await prisma.ticket.findMany();
 
       for (const { referenceNumber } of rows) expect(referenceNumber).toBeLessThan(1001);
+    });
+
+    // Reads the first seeded Ticket with an Internal Note the way an Admin's workspace does.
+    async function ticketWithInternalNote() {
+      const { admins } = await seed(prisma, NOW);
+      const agent = await signedInAgent(makeTestApp(), admins[0] as string, DEMO_PASSWORD);
+      const { tickets } = (await agent.get('/api/admin/tickets').query({ status: 'ALL' })).body as {
+        tickets: AdminQueueTicket[];
+      };
+      for (const { id } of tickets) {
+        const { notes } = (await agent.get(`/api/admin/tickets/${id}/internal-notes`)).body as { notes: InternalNote[] };
+        const [note] = notes;
+        if (note) return { agent, id, note };
+      }
+      throw new Error('No seeded Ticket has an Internal Note.');
+    }
+
+    it('puts an Internal Note among the Messages of a seeded Ticket, which its Author can not see', async () => {
+      const { agent, id, note } = await ticketWithInternalNote();
+
+      expect(note).toMatchObject({ adminName: expect.any(String), body: expect.any(String) });
+      const { messages } = (await agent.get(`/api/tickets/${id}/messages`)).body as { messages: Message[] };
+      const times = messages.map(({ createdAt }) => createdAt);
+      expect(note.createdAt > (times[0] as string)).toBe(true);
+      expect(note.createdAt < (times.at(-1) as string)).toBe(true);
+
+      const { author } = await prisma.ticket.findUniqueOrThrow({ where: { id }, select: { author: true } });
+      const asAuthor = await signedInAgent(makeTestApp(), author.email, DEMO_PASSWORD);
+      const seen = await Promise.all(
+        ['', '/messages', '/events'].map((path) => asAuthor.get(`/api/tickets/${id}${path}`).expect(200)),
+      );
+      for (const res of seen) expect(JSON.stringify(res.body)).not.toContain(note.body);
+    });
+
+    it('records how each seeded Ticket reached its status, which its Author can also see', async () => {
+      await seed(prisma, NOW);
+
+      const tickets = await prisma.ticket.findMany({
+        where: { status: { not: 'OPEN' } },
+        include: { events: { where: { kind: 'STATUS_CHANGED' }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] } },
+      });
+
+      expect(tickets.map(({ status }) => status)).toEqual(expect.arrayContaining(['IN_PROGRESS', 'RESOLVED', 'CLOSED']));
+      for (const { status, events } of tickets) {
+        expect(events[0]?.before).toBe('OPEN');
+        expect(events.at(-1)?.after).toBe(status);
+        for (const event of events) expect(event).toMatchObject({ visibleToAuthor: true, authorId: null });
+      }
+    });
+
+    it('records a Priority an Admin overrode, for Admins only', async () => {
+      await seed(prisma, NOW);
+
+      const { events } = await prisma.ticket.findFirstOrThrow({
+        where: { prioritySource: 'ADMIN' },
+        select: { events: { where: { kind: 'PRIORITY_OVERRIDDEN' } } },
+      });
+
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({ before: 'MEDIUM', after: 'HIGH', visibleToAuthor: false });
+    });
+
+    it('adds Internal Notes and Ticket Events to Tickets seeded before they existed, in their right place', async () => {
+      await seed(prisma, NOW);
+      await prisma.internalNote.deleteMany();
+      await prisma.ticketEvent.deleteMany();
+
+      await seed(prisma, new Date('2026-03-20T12:00:00.000Z'));
+
+      const note = await prisma.internalNote.findFirstOrThrow();
+      const messages = await prisma.message.findMany({ where: { ticketId: note.ticketId }, orderBy: { createdAt: 'asc' } });
+      expect(note.createdAt > (messages[0] as { createdAt: Date }).createdAt).toBe(true);
+      expect(note.createdAt < (messages.at(-1) as { createdAt: Date }).createdAt).toBe(true);
+      expect(await prisma.ticketEvent.count()).toBeGreaterThan(0);
+    });
+
+    it("doesn't duplicate Internal Notes or Ticket Events when it runs again", async () => {
+      await seed(prisma, NOW);
+      const notes = await prisma.internalNote.count();
+      const events = await prisma.ticketEvent.count();
+      expect(notes).toBeGreaterThan(0);
+
+      await seed(prisma, new Date('2026-03-20T12:00:00.000Z'));
+
+      expect(await prisma.internalNote.count()).toBe(notes);
+      expect(await prisma.ticketEvent.count()).toBe(events);
     });
 
     it("can run again without duplicating Tickets or undoing an Admin's work", async () => {

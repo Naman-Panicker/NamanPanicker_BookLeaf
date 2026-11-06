@@ -151,10 +151,12 @@ export type AdminQueueResponse = z.infer<typeof adminQueueResponseSchema>;
 
 export const ticketParamsSchema = z.object({ ticketId: z.string() });
 
-// Says only which side wrote a Message, so Authors hear from BookLeaf and not from a named Admin.
 export const messageSchema = z.object({
   id: z.string(),
+  // Which side wrote the Message.
   sender: roleSchema,
+  // Sent to Admins only, so Authors hear from BookLeaf and not from a named Admin.
+  senderName: z.string().optional(),
   body: z.string(),
   createdAt: z.iso.datetime(),
 });
@@ -174,6 +176,32 @@ export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
 
 export const messageResponseSchema = z.object({ message: messageSchema });
 export type MessageResponse = z.infer<typeof messageResponseSchema>;
+
+export const INTERNAL_NOTE_MAX_LENGTH = 5000;
+
+// Only ever sent to Admins, who see which of them wrote it.
+export const internalNoteSchema = z.object({
+  id: z.string(),
+  adminName: z.string(),
+  body: z.string(),
+  createdAt: z.iso.datetime(),
+});
+export type InternalNote = z.infer<typeof internalNoteSchema>;
+
+export const internalNotesResponseSchema = z.object({ notes: z.array(internalNoteSchema) });
+export type InternalNotesResponse = z.infer<typeof internalNotesResponseSchema>;
+
+export const addInternalNoteRequestSchema = z.object({
+  body: z
+    .string({ error: 'Write an Internal Note.' })
+    .trim()
+    .min(1, { error: 'Write an Internal Note.' })
+    .max(INTERNAL_NOTE_MAX_LENGTH, { error: `Keep the Internal Note to ${INTERNAL_NOTE_MAX_LENGTH} characters or fewer.` }),
+});
+export type AddInternalNoteRequest = z.infer<typeof addInternalNoteRequestSchema>;
+
+export const internalNoteResponseSchema = z.object({ note: internalNoteSchema });
+export type InternalNoteResponse = z.infer<typeof internalNoteResponseSchema>;
 
 export const ticketEventKindSchema = z.enum([
   'STATUS_CHANGED',

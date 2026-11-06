@@ -3,6 +3,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { AiClient } from './ai-client';
 import type { DraftMessage } from './draft-prompt';
+import type { InternalNote } from './generated/prisma/client';
 import {
   type BookFixture,
   createAdmin,
@@ -560,9 +561,15 @@ describe('what the AI is given', () => {
     expect(user).not.toContain('Payout Date');
   });
 
-  // Checked by the compiler when the tests are typechecked. Ticket 10 can swap in the real InternalNote type.
+  // Checked by the compiler when the tests are typechecked.
   it('has a prompt that only takes Message records, not Internal Notes (ADR-0004)', () => {
-    const internalNote = { id: 'note', ticketId: 'ticket', adminId: 'asha', body: 'Admin-only', createdAt: new Date() };
+    const internalNote: InternalNote = {
+      id: 'note',
+      ticketId: 'ticket',
+      adminId: 'asha',
+      body: 'Admin-only',
+      createdAt: new Date(),
+    };
 
     // @ts-expect-error -- an Internal Note has no authorId, so it isn't a DraftMessage.
     const messages: DraftMessage[] = [internalNote];

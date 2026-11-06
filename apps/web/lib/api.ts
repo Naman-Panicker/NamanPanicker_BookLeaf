@@ -1,4 +1,5 @@
 import {
+  type AddInternalNoteRequest,
   type AdminQueueQuery,
   adminQueueResponseSchema,
   adminTicketResponseSchema,
@@ -6,6 +7,8 @@ import {
   apiErrorSchema,
   authorTicketResponseSchema,
   type CreateTicketRequest,
+  internalNoteResponseSchema,
+  internalNotesResponseSchema,
   messageResponseSchema,
   myBooksResponseSchema,
   myTicketsResponseSchema,
@@ -155,6 +158,20 @@ export async function sendTicketMessage(ticketId: string, message: SendMessageRe
 export async function getTicketEvents(ticketId: string) {
   const res = await authenticated(`/api/tickets/${encodeURIComponent(ticketId)}/events`);
   return ticketEventsResponseSchema.parse(await res.json()).events;
+}
+
+export async function getInternalNotes(ticketId: string) {
+  const res = await authenticated(`/api/admin/tickets/${encodeURIComponent(ticketId)}/internal-notes`);
+  return internalNotesResponseSchema.parse(await res.json()).notes;
+}
+
+export async function addInternalNote(ticketId: string, note: AddInternalNoteRequest) {
+  const res = await authenticated(`/api/admin/tickets/${encodeURIComponent(ticketId)}/internal-notes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(note),
+  });
+  return internalNoteResponseSchema.parse(await res.json()).note;
 }
 
 export async function confirmResolution(ticketId: string) {

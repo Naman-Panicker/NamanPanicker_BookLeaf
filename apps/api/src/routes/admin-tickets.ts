@@ -1,4 +1,5 @@
 import {
+  addInternalNoteRequestSchema,
   type AdminQueueResponse,
   adminQueueQuerySchema,
   adminQueueResponseSchema,
@@ -9,6 +10,11 @@ import {
   type AdminWorkspaceResponse,
   ALL_STATUSES,
   apiErrorSchema,
+  type InternalNote,
+  internalNoteResponseSchema,
+  type InternalNoteResponse,
+  internalNotesResponseSchema,
+  type InternalNotesResponse,
   isUnresolved,
   orderQueue,
   royaltySummary,
@@ -63,6 +69,24 @@ const queueTicketSelect = {
 } satisfies Prisma.TicketSelect;
 
 type QueueTicketRecord = Prisma.TicketGetPayload<{ select: typeof queueTicketSelect }>;
+
+const internalNoteSelect = {
+  id: true,
+  body: true,
+  createdAt: true,
+  admin: { select: { name: true } },
+} satisfies Prisma.InternalNoteSelect;
+
+type InternalNoteRecord = Prisma.InternalNoteGetPayload<{ select: typeof internalNoteSelect }>;
+
+function toInternalNote(record: InternalNoteRecord): InternalNote {
+  return {
+    id: record.id,
+    adminName: record.admin.name,
+    body: record.body,
+    createdAt: record.createdAt.toISOString(),
+  };
+}
 
 function toAdminQueueTicket(record: QueueTicketRecord): AdminQueueTicket {
   return {
@@ -281,6 +305,55 @@ export function addAdminTicketRoutes({ routes, prisma, clock, classifier, drafts
     },
     async (_req, res, { params }) => {
       res.json(await drafts.regenerate(params.ticketId));
+    },
+  );
+
+  routes.add(
+    {
+      method: 'get',
+      path: '/api/admin/tickets/:ticketId/internal-notes',
+      summary: "List a Ticket's Internal Notes, oldest first",
+      tag: 'Admin',
+      adminOnly: true,
+      params: ticketParamsSchema,
+      responses: {
+        200: { description: 'The Internal Notes.', schema: internalNotesResponseSchema },
+        404: { description: 'The Ticket does not exist, or the caller is not an Admin.', schema: apiErrorSchema },
+      },
+    },
+    async (_req, res, { params }) => {
+      const record = await prisma.ticket.findUnique({
+        where: { id: params.ticketId },
+        select: { internalNotes: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: internalNoteSelect } },
+      });
+      if (!record) throw notFound();
+      res.json({ notes: record.internalNotes.map(toInternalNote) } satisfies InternalNotesResponse);
+    },
+  );
+
+  routes.add(
+    {
+      method: 'post',
+      path: '/api/admin/tickets/:ticketId/internal-notes',
+      summary: 'Add an Internal Note to a Ticket, for other Admins. The Author never sees it',
+      tag: 'Admin',
+      adminOnly: true,
+      params: ticketParamsSchema,
+      body: addInternalNoteRequestSchema,
+      responses: {
+        201: { description: 'The Internal Note.', schema: internalNoteResponseSchema },
+        404: { description: 'The Ticket does not exist, or the caller is not an Admin.', schema: apiErrorSchema },
+      },
+    },
+    async (_req, res, { params, body }) => {
+      const ticket = await prisma.ticket.findUnique({ where: { id: params.ticketId }, select: { id: true } });
+      if (!ticket) throw notFound();
+      // Nothing on the Ticket changes, so an Author can't tell from their Last update that a note was added.
+      const record = await prisma.internalNote.create({
+        data: { ticketId: ticket.id, adminId: currentAdminId(res), body: body.body, createdAt: clock.now() },
+        select: internalNoteSelect,
+      });
+      res.status(201).json({ note: toInternalNote(record) } satisfies InternalNoteResponse);
     },
   );
 }

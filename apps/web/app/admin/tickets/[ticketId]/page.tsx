@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  addInternalNoteRequestSchema,
   type AdminQueueTicket,
   type AdminWorkspaceResponse,
   type Book,
@@ -8,6 +9,7 @@ import {
   categorySchema,
   type ClassificationSource,
   GENERAL_ACCOUNT_LEVEL_LABEL,
+  type InternalNote,
   isPublished,
   isUnclassified,
   MAX_CLASSIFICATION_ATTEMPTS,
@@ -24,20 +26,23 @@ import {
 } from '@bookleaf/shared';
 import Link from 'next/link';
 import { notFound, useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { Figure } from '@/components/figure';
 import { DraftEditor } from '@/components/draft-editor';
 import { TicketStatusBadge } from '@/components/ticket-status-badge';
-import { TicketThread } from '@/components/ticket-thread';
+import { INTERNAL_PANEL_CLASS, InternalLabel, TicketThread } from '@/components/ticket-thread';
 import { CategoryTriage, PriorityTriage } from '@/components/triage-badges';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { Textarea } from '@/components/ui/textarea';
 import {
   actionErrorMessage,
+  addInternalNote,
   ApiRequestError,
   getAdminWorkspace,
+  getInternalNotes,
   getTicketEvents,
   getTicketMessages,
   retryClassification,
@@ -47,7 +52,7 @@ import {
 } from '@/lib/api';
 import { formatCount, formatDate, formatDay, formatRupees } from '@/lib/format';
 
-type Workspace = AdminWorkspaceResponse & { messages: Message[]; events: TicketEvent[] };
+type Workspace = AdminWorkspaceResponse & { messages: Message[]; events: TicketEvent[]; notes: InternalNote[] };
 
 export default function AdminTicketPage() {
   const { ticketId } = useParams<{ ticketId: string }>();
@@ -60,9 +65,14 @@ export default function AdminTicketPage() {
   useEffect(() => {
     // A slow answer must not overwrite the one from a later reload.
     let superseded = false;
-    Promise.all([getAdminWorkspace(ticketId), getTicketMessages(ticketId), getTicketEvents(ticketId)]).then(
-      ([facts, messages, events]) => {
-        if (!superseded) setWorkspace({ ...facts, messages, events });
+    Promise.all([
+      getAdminWorkspace(ticketId),
+      getTicketMessages(ticketId),
+      getTicketEvents(ticketId),
+      getInternalNotes(ticketId),
+    ]).then(
+      ([facts, messages, events, notes]) => {
+        if (!superseded) setWorkspace({ ...facts, messages, events, notes });
       },
       (error: unknown) => {
         if (superseded) return;
@@ -83,7 +93,7 @@ export default function AdminTicketPage() {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
 
-  const { ticket, book, royalty, messages, events } = workspace;
+  const { ticket, book, royalty, messages, events, notes } = workspace;
   const reload = () => setVersion((current) => current + 1);
   return (
     <div className="mx-auto flex max-w-7xl flex-col gap-6">
@@ -109,6 +119,7 @@ export default function AdminTicketPage() {
           <TicketThread
             messages={messages}
             events={events}
+            notes={notes}
             nameOf={(side) => (side === 'AUTHOR' ? ticket.author.name : 'BookLeaf')}
           />
           {ticket.status === 'CLOSED' ? (
@@ -118,6 +129,7 @@ export default function AdminTicketPage() {
           ) : (
             <DraftEditor key={ticket.id} ticketId={ticket.id} onChanged={reload} />
           )}
+          <InternalNoteBox key={`note-${ticket.id}`} ticketId={ticket.id} onChanged={reload} />
         </div>
         <aside className="flex flex-col gap-6">
           <StatusControls ticketId={ticket.id} status={ticket.status} onChanged={reload} />
@@ -150,6 +162,55 @@ function useTicketChange(onChanged: () => void) {
   }
 
   return { saving, error, run };
+}
+
+const NOTE_FIELD_ID = 'internal-note-body';
+
+function InternalNoteBox({ ticketId, onChanged }: { ticketId: string; onChanged: () => void }) {
+  const { saving, error, run } = useTicketChange(onChanged);
+  const [body, setBody] = useState('');
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const shownError = validationError ?? error;
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const parsed = addInternalNoteRequestSchema.safeParse({ body });
+    if (!parsed.success) {
+      setValidationError(parsed.error.issues[0]?.message ?? null);
+      return;
+    }
+    setValidationError(null);
+    void run(async () => {
+      await addInternalNote(ticketId, parsed.data);
+      setBody('');
+    });
+  }
+
+  return (
+    <form onSubmit={handleSubmit} noValidate className={INTERNAL_PANEL_CLASS}>
+      <Label htmlFor={NOTE_FIELD_ID}>Internal Note</Label>
+      <InternalLabel />
+      <Textarea
+        id={NOTE_FIELD_ID}
+        rows={3}
+        className="bg-background"
+        value={body}
+        onChange={(event) => setBody(event.target.value)}
+        aria-invalid={shownError ? true : undefined}
+        aria-describedby={shownError ? `${NOTE_FIELD_ID}-error` : undefined}
+      />
+      {shownError && (
+        <p id={`${NOTE_FIELD_ID}-error`} role="alert" className="text-sm text-destructive">
+          {shownError}
+        </p>
+      )}
+      <div>
+        <Button type="submit" variant="outline" disabled={saving}>
+          {saving ? 'Adding…' : 'Add Internal Note'}
+        </Button>
+      </div>
+    </form>
+  );
 }
 
 function StatusControls({

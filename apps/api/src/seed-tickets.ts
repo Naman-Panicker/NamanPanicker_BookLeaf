@@ -8,6 +8,9 @@ export const DEV_EMAIL = 'dev.menon@bookleaf.example';
 const HOUR_MS = 60 * 60 * 1000;
 
 type SeedMessage = { from: 'AUTHOR' | 'ADMIN'; hoursAgo: number; body: string };
+type SeedInternalNote = { adminEmail: string; hoursAgo: number; body: string };
+// Made by the Ticket's Assignee.
+type SeedEvent = { kind: 'STATUS_CHANGED' | 'PRIORITY_OVERRIDDEN'; hoursAgo: number; before: string; after: string };
 
 type SeedTicket = {
   // Below 1001, where the sequence for real Tickets starts, so the two can't collide.
@@ -25,6 +28,8 @@ type SeedTicket = {
   assigneeEmail?: string;
   // Oldest first. The first is the Author's description.
   messages: SeedMessage[];
+  internalNotes?: SeedInternalNote[];
+  events?: SeedEvent[];
 };
 
 // Modelled on the sample queries in the assignment's knowledge base.
@@ -91,6 +96,17 @@ const SEED_TICKETS: SeedTicket[] = [
         body: 'Thank you. Pages 40 to 60 are the worst. I have an event in two weeks, so will the reprint arrive before then?',
       },
     ],
+    internalNotes: [
+      {
+        adminEmail: ASHA_EMAIL,
+        hoursAgo: 27,
+        body: "Dev, it's worth asking our in-house print team to check the whole batch, not just Meera's copies. Let's not promise a reprint date until they answer.",
+      },
+    ],
+    events: [
+      { kind: 'PRIORITY_OVERRIDDEN', hoursAgo: 29, before: 'MEDIUM', after: 'HIGH' },
+      { kind: 'STATUS_CHANGED', hoursAgo: 28, before: 'OPEN', after: 'IN_PROGRESS' },
+    ],
   },
   {
     referenceNumber: 904,
@@ -113,6 +129,7 @@ const SEED_TICKETS: SeedTicket[] = [
         body: "Thanks for checking in, Kavita. Raising Roots is still in typesetting, and I'm confirming the updated schedule with our production team. I'll come back to you with a specific date within 48 hours.",
       },
     ],
+    events: [{ kind: 'STATUS_CHANGED', hoursAgo: 20, before: 'OPEN', after: 'IN_PROGRESS' }],
   },
   {
     referenceNumber: 905,
@@ -135,6 +152,10 @@ const SEED_TICKETS: SeedTicket[] = [
         body: "This is typically a stock sync issue, Vikram. I've triggered a re-sync with our distribution team, and the listing should be live again within 24–48 hours.",
       },
     ],
+    events: [
+      { kind: 'STATUS_CHANGED', hoursAgo: 100, before: 'OPEN', after: 'IN_PROGRESS' },
+      { kind: 'STATUS_CHANGED', hoursAgo: 100, before: 'IN_PROGRESS', after: 'RESOLVED' },
+    ],
   },
   {
     referenceNumber: 906,
@@ -156,6 +177,10 @@ const SEED_TICKETS: SeedTicket[] = [
         hoursAgo: 230,
         body: 'Yes, Farhan. You can submit metadata updates through the dashboard or by emailing the BookLeaf team. Changes typically reflect on platforms within 3–5 business days.',
       },
+    ],
+    events: [
+      { kind: 'STATUS_CHANGED', hoursAgo: 230, before: 'OPEN', after: 'IN_PROGRESS' },
+      { kind: 'STATUS_CHANGED', hoursAgo: 230, before: 'IN_PROGRESS', after: 'CLOSED' },
     ],
   },
 ];
@@ -195,17 +220,60 @@ function toCreateInput(ticket: SeedTicket, now: Date): Prisma.TicketCreateInput 
   };
 }
 
-// Dated relative to now, so the wait badges look real. An existing Ticket is left alone,
-// so running the seed again doesn't undo what an Admin has done to it.
+// Fixed IDs, so a Ticket seeded before these existed gets them and running the seed again adds nothing.
+// Dated from when the Ticket was raised, so on such a Ticket they still fall among its Messages.
+function seedTicketHistory(prisma: PrismaClient, seeded: SeedTicket, ticket: { id: string; createdAt: Date }) {
+  const raisedHoursAgo = Math.max(...seeded.messages.map(({ hoursAgo }) => hoursAgo));
+  const at = (hoursAgo: number) => new Date(ticket.createdAt.getTime() + (raisedHoursAgo - hoursAgo) * HOUR_MS);
+
+  return Promise.all([
+    ...(seeded.internalNotes ?? []).map(({ adminEmail, hoursAgo, body }, index) => {
+      const id = `seed-note-${seeded.referenceNumber}-${index}`;
+      return prisma.internalNote.upsert({
+        where: { id },
+        create: {
+          id,
+          ticket: { connect: { id: ticket.id } },
+          admin: { connect: { email: adminEmail } },
+          body,
+          createdAt: at(hoursAgo),
+        },
+        update: {},
+      });
+    }),
+    ...(seeded.events ?? []).map(({ kind, hoursAgo, before, after }, index) => {
+      const id = `seed-event-${seeded.referenceNumber}-${index}`;
+      return prisma.ticketEvent.upsert({
+        where: { id },
+        create: {
+          id,
+          ticket: { connect: { id: ticket.id } },
+          admin: { connect: { email: seeded.assigneeEmail as string } },
+          kind,
+          before,
+          after,
+          visibleToAuthor: kind === 'STATUS_CHANGED',
+          createdAt: at(hoursAgo),
+        },
+        update: {},
+      });
+    }),
+  ]);
+}
+
+// Dated relative to now, so the wait badges look real. An existing Ticket's own fields and Messages
+// are left alone, so running the seed again doesn't undo what an Admin has done to it.
 export async function seedTickets(prisma: PrismaClient, now: Date) {
   await Promise.all(
-    SEED_TICKETS.map((ticket) =>
-      prisma.ticket.upsert({
-        where: { referenceNumber: ticket.referenceNumber },
-        create: toCreateInput(ticket, now),
+    SEED_TICKETS.map(async (seeded) => {
+      const ticket = await prisma.ticket.upsert({
+        where: { referenceNumber: seeded.referenceNumber },
+        create: toCreateInput(seeded, now),
         update: {},
-      }),
-    ),
+        select: { id: true, createdAt: true },
+      });
+      await seedTicketHistory(prisma, seeded, ticket);
+    }),
   );
   return SEED_TICKETS.map(({ referenceNumber }) => `BL-${referenceNumber}`);
 }

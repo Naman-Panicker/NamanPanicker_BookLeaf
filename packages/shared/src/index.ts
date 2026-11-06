@@ -9,3 +9,4 @@ export * from './session';
 export * from './spike';
 export * from './ticket-status';
 export * from './tickets';
+export * from './timeline';

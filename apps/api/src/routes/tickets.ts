@@ -55,9 +55,36 @@ function toAuthorTicket(record: AuthorTicketRecord): AuthorTicket {
   };
 }
 
+const messageOrder = [{ createdAt: 'asc' }, { id: 'asc' }] satisfies Prisma.MessageOrderByWithRelationInput[];
+
+async function listAuthorMessages(prisma: PrismaClient, session: Session, ticketId: string) {
+  const record = await prisma.ticket.findFirst({
+    where: accessibleTicket(session, ticketId),
+    select: { messages: { orderBy: messageOrder, select: messageSelect } },
+  });
+  return record?.messages.map(toMessage);
+}
+
+async function listAdminMessages(prisma: PrismaClient, session: Session, ticketId: string) {
+  const record = await prisma.ticket.findFirst({
+    where: accessibleTicket(session, ticketId),
+    select: {
+      messages: {
+        orderBy: messageOrder,
+        select: { ...messageSelect, author: { select: { name: true } }, admin: { select: { name: true } } },
+      },
+    },
+  });
+  return record?.messages.map((message) => ({
+    ...toMessage(message),
+    // The migration's check means one of the two is always set.
+    senderName: (message.author ?? message.admin)?.name,
+  }));
+}
+
 const eventOrder = [{ createdAt: 'asc' }, { id: 'asc' }] satisfies Prisma.TicketEventOrderByWithRelationInput[];
 
-// Likewise, this leaves out the Admin's name and any reason.
+// Selecting only these columns leaves out the Admin's name and any reason.
 const eventSelect = {
   id: true,
   kind: true,
@@ -206,12 +233,13 @@ export function addTicketRoutes({ routes, prisma, clock, classifier }: Deps) {
       },
     },
     async (_req, res, { params }) => {
-      const record = await prisma.ticket.findFirst({
-        where: accessibleTicket(currentSession(res), params.ticketId),
-        select: { messages: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: messageSelect } },
-      });
-      if (!record) throw notFound();
-      res.json({ messages: record.messages.map(toMessage) } satisfies TicketMessagesResponse);
+      const session = currentSession(res);
+      const messages =
+        session.role === 'ADMIN'
+          ? await listAdminMessages(prisma, session, params.ticketId)
+          : await listAuthorMessages(prisma, session, params.ticketId);
+      if (!messages) throw notFound();
+      res.json({ messages } satisfies TicketMessagesResponse);
     },
   );
 

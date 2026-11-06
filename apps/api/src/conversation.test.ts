@@ -98,13 +98,25 @@ describe('sending a Message', () => {
     await adminAgent.post(`/api/tickets/${ticketId}/messages`).send({ body: 'Looking into it.' });
 
     const asAuthor = await author.get(`/api/tickets/${ticketId}/messages`);
-    const asAdmin = await adminAgent.get(`/api/tickets/${ticketId}/messages`);
     expect(asAuthor.body.messages.map(({ body }: { body: string }) => body)).toEqual([
       'Test description',
       'Looking into it.',
     ]);
-    expect(asAdmin.body).toEqual(asAuthor.body);
     expect(JSON.stringify(asAuthor.body)).not.toContain('Asha');
+    expect(Object.keys(asAuthor.body.messages[1]).sort()).toEqual(['body', 'createdAt', 'id', 'sender']);
+  });
+
+  it('names who wrote each Message for an Admin reading the thread', async () => {
+    const { ticketId, adminAgent } = await setUp();
+
+    await adminAgent.post(`/api/tickets/${ticketId}/messages`).send({ body: 'Looking into it.' });
+
+    const res = await adminAgent.get(`/api/tickets/${ticketId}/messages`);
+    expect(res.status).toBe(200);
+    expect(res.body.messages.map(({ sender, senderName, body }: Record<string, string>) => [sender, senderName, body])).toEqual([
+      ['AUTHOR', 'Kavita Deshmukh', 'Test description'],
+      ['ADMIN', 'Asha Rao', 'Looking into it.'],
+    ]);
   });
 
   it.each([
